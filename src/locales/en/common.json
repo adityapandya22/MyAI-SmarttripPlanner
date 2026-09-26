@@ -75,6 +75,11 @@
       "preferTerminal": "Prefer the terminal?"
     },
     "models": {
+      "freeNote": "100% Free · No Login Needed",
+      "smartPlanner": "Autonomous AI planner (zero login)",
+      "geminiNote": "Free Google AI Studio key",
+      "geminiFlash": "Fast & intelligent free AI",
+      "gemini15": "High context window",
       "claudeNote": "Pro/Max subscription",
       "codexNote": "Plus subscription (Codex)",
       "sonnet": "fast and bright — recommended",
@@ -500,6 +505,7 @@
     "placeholder": "Describe the trip of your dreams…",
     "stop": "Stop",
     "send": "Send",
+    "currencyINR": "₹ Rupee",
     "currencyEUR": "€ Euro",
     "currencyUSD": "$ Dollar",
     "footerHint": "The itinerary is created only by chatting with Ulisse",
@@ -553,6 +559,7 @@
     "park": "Nature"
   },
   "gas": {
+    "inr_l": "₹ / liter",
     "usd_gal": "$ / gallon",
     "usd_l": "$ / liter",
     "eur_l": "€ / liter"

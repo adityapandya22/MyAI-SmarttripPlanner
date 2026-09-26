@@ -20,10 +20,10 @@ export const usePoi = create((set) => ({
 
 if (import.meta.env.DEV && typeof window !== 'undefined') window.__poi = usePoi
 
-const poiIcon = (cat) =>
+const poiIcon = (cat, name, label) =>
   L.divIcon({
     className: '',
-    html: `<div class="poi-pin" style="--poi:${CATS[cat].color}"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${CATS[cat].svg}</svg></div>`,
+    html: `<div class="poi-pin" role="button" aria-label="${(name ? `${name} (${label})` : label).replace(/"/g, '&quot;')}" style="--poi:${CATS[cat].color}"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${CATS[cat].svg}</svg></div>`,
     iconSize: [24, 24],
     iconAnchor: [12, 12],
   })
@@ -77,33 +77,44 @@ export function PoiMarkers() {
   }
 
   if (!enabled) return null
-  return markers.map((p) => (
-    <Marker key={p.id} position={[p.lat, p.lng]} icon={poiIcon(p.cat)}>
-      <Popup>
-        <div className="min-w-40 max-w-56">
-          <div className="font-display text-[13px] font-bold text-ink-900">{p.name}</div>
-          <div className="mt-0.5 text-[11px] text-ink-500">
-            {t(CATS[p.cat].labelKey)}{p.inTrip ? ` · ${t('common.dayN', { n: p.dayIndex + 1 })}` : ` · ${t('map.poi.inSuggestions')}`}
+  return markers.map((p) => {
+    const catLabel = t(CATS[p.cat].labelKey)
+    const accessibleName = `${p.name} (${catLabel})`
+    return (
+      <Marker
+        key={p.id}
+        position={[p.lat, p.lng]}
+        icon={poiIcon(p.cat, p.name, catLabel)}
+        keyboard={true}
+        title={accessibleName}
+        alt={accessibleName}
+      >
+        <Popup>
+          <div className="min-w-40 max-w-56">
+            <div className="font-display text-[13px] font-bold text-ink-900">{p.name}</div>
+            <div className="mt-0.5 text-[11px] text-ink-500">
+              {catLabel}{p.inTrip ? ` · ${t('common.dayN', { n: p.dayIndex + 1 })}` : ` · ${t('map.poi.inSuggestions')}`}
+            </div>
+            {p.inTrip ? (
+              <button
+                onClick={() => { setFocusItem(p.itemId, p.color); revealList('itinerary') }}
+                className="mt-2 rounded-lg bg-ink-900 px-2.5 py-1.5 text-[11px] font-bold text-white transition hover:bg-ink-700"
+              >
+                {t('common.seeInItinerary')}
+              </button>
+            ) : (
+              <button
+                onClick={() => addSugToTrip(p.sug)}
+                className="mt-2 inline-flex items-center gap-1 rounded-lg bg-brand-500 px-2.5 py-1.5 text-[11px] font-bold text-white transition hover:bg-brand-600"
+              >
+                <Plus size={11} strokeWidth={3} /> {t('common.addToTrip')}
+              </button>
+            )}
           </div>
-          {p.inTrip ? (
-            <button
-              onClick={() => { setFocusItem(p.itemId, p.color); revealList('itinerary') }}
-              className="mt-2 rounded-lg bg-ink-900 px-2.5 py-1.5 text-[11px] font-bold text-white transition hover:bg-ink-700"
-            >
-              {t('common.seeInItinerary')}
-            </button>
-          ) : (
-            <button
-              onClick={() => addSugToTrip(p.sug)}
-              className="mt-2 inline-flex items-center gap-1 rounded-lg bg-brand-500 px-2.5 py-1.5 text-[11px] font-bold text-white transition hover:bg-brand-600"
-            >
-              <Plus size={11} strokeWidth={3} /> {t('common.addToTrip')}
-            </button>
-          )}
-        </div>
-      </Popup>
-    </Marker>
-  ))
+        </Popup>
+      </Marker>
+    )
+  })
 }
 
 /* ---------- control (overlay, next to the fit button) ---------- */
@@ -129,6 +140,8 @@ export function PoiControl() {
       <button
         onClick={() => { setOpen((o) => !o); if (!enabled) toggle() }}
         title={t('map.poi.showTitle')}
+        aria-label={t('map.poi.showTitle')}
+        aria-expanded={open}
         className={`flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-xs font-bold shadow-lg backdrop-blur transition ${
           enabled ? 'border-violet-400 bg-white text-violet-700' : 'border-ink-200 bg-white/95 text-ink-700 hover:border-violet-400 hover:text-violet-600'
         }`}
@@ -143,6 +156,7 @@ export function PoiControl() {
             <h4 className="font-display text-[12.5px] font-bold text-ink-900">{t('map.poi.title')}</h4>
             <button
               onClick={() => { toggle(); if (enabled) setOpen(false) }}
+              aria-pressed={enabled}
               className={`rounded-lg px-2 py-1 text-[10.5px] font-bold transition ${enabled ? 'bg-violet-100 text-violet-700' : 'bg-ink-100 text-ink-500'}`}
             >
               {enabled ? t('map.poi.on') : t('map.poi.off')}
@@ -155,6 +169,7 @@ export function PoiControl() {
               <button
                 key={k}
                 onClick={() => setSource(k)}
+                aria-pressed={source === k}
                 className={`flex-1 rounded-md py-1 text-[10.5px] font-bold transition ${
                   source === k ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-700'
                 }`}
@@ -170,7 +185,13 @@ export function PoiControl() {
               const c = CATS[k]
               const on = cats[k]
               return (
-                <button key={k} onClick={() => toggleCat(k)} className="flex items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-left transition hover:bg-ink-50">
+                <button
+                  key={k}
+                  onClick={() => toggleCat(k)}
+                  role="checkbox"
+                  aria-checked={on}
+                  className="flex items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-left transition hover:bg-ink-50"
+                >
                   <span className="grid size-6 shrink-0 place-items-center rounded-md text-white" style={{ background: on ? c.color : '#cbd5e1' }}>
                     <c.Icon size={13} />
                   </span>

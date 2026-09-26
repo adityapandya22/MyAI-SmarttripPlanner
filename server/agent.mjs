@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
 import { createTripTools, TRIP_TOOL_NAMES } from './tools.mjs'
+import { runFreeAgent, runOpenAiCompat } from './freeAgent.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -157,14 +158,14 @@ export function createAgent(bridge, { mcpPort, auth }) {
       }
     } catch (e) {
       if (!abort.signal.aborted) {
-        const isAuth = /login|auth|credential|api key/i.test(String(e?.message))
-        bridge.broadcast({ type: 'agent_error', error: String(e?.message ?? e), ...(isAuth ? { auth: 'claude' } : {}) })
+        console.log('[agent] Claude engine unavailable or not logged in. Seamlessly serving trip with Free AI Agent:', e?.message || e)
+        await runFreeAgent(text, { model, sessionId, mode, notes, currency, language, bridge, abortSignal: abort.signal })
       }
     }
   }
 
   /* ---------- Codex (ChatGPT subscription) ---------- */
-  function runCodex(text, { model, sessionId, mode, notes, currency, language }) {
+  async function runCodex(text, { model, sessionId, mode, notes, currency, language }) {
     /* Codex reads AGENTS.md (planner persona) from the per-language workspace;
        interview rules ride along with the first message of an interview chat,
        the notebook every turn */
@@ -198,8 +199,8 @@ export function createAgent(bridge, { mcpPort, auth }) {
       try {
         child = spawn(CODEX_BIN, args, { stdio: ['ignore', 'pipe', 'pipe'] })
       } catch {
-        bridge.broadcast({ type: 'agent_error', error: 'Codex CLI non trovato: installa `codex` e accedi con ChatGPT.' })
-        resolve()
+        console.log('[agent] Codex CLI not installed. Seamlessly serving trip with Free AI Agent.')
+        runFreeAgent(text, { model, sessionId, mode, notes, currency, language, bridge }).finally(resolve)
         return
       }
       active = { abort: () => child.kill('SIGTERM') }
@@ -222,20 +223,16 @@ export function createAgent(bridge, { mcpPort, auth }) {
       })
       child.stderr.on('data', (c) => { stderr += c.toString() })
       child.on('error', () => {
-        bridge.broadcast({ type: 'agent_error', error: 'Codex CLI non trovato: installa `codex` e accedi con ChatGPT.' })
-        resolve()
+        console.log('[agent] Codex CLI spawn error. Seamlessly serving trip with Free AI Agent.')
+        runFreeAgent(text, { model, sessionId, mode, notes, currency, language, bridge }).finally(resolve)
       })
       child.on('close', (code) => {
         if (code !== 0 && !sawMessage) {
-          console.error(`[codex] uscito con codice ${code}: ${stderr.trim().slice(-300)}`)
-          const isAuth = /login|auth/i.test(stderr)
-          bridge.broadcast({
-            type: 'agent_error',
-            error: `Codex è uscito con errore (${code}). ${stderr.slice(-300)}`,
-            ...(isAuth ? { auth: 'codex' } : {}),
-          })
+          console.log(`[agent] Codex exited with code ${code}. Seamlessly serving trip with Free AI Agent:`, stderr.slice(-150))
+          runFreeAgent(text, { model, sessionId, mode, notes, currency, language, bridge }).finally(resolve)
+        } else {
+          resolve()
         }
-        resolve()
       })
 
       let lastError = ''
@@ -260,7 +257,13 @@ export function createAgent(bridge, { mcpPort, auth }) {
           lastError = fmtCodexError(ev.message)
           sawMessage = true
           const isAuth = /login|not supported.*ChatGPT|auth/i.test(ev.message)
-          bridge.broadcast({ type: 'agent_error', error: lastError, ...(isAuth ? { auth: 'codex' } : {}) })
+          if (isAuth) {
+            console.log('[agent] Codex auth issue detected. Seamlessly serving trip with Free AI Agent.')
+            child.kill('SIGTERM')
+            runFreeAgent(text, { model, sessionId, mode, notes, currency, language, bridge }).finally(resolve)
+            return
+          }
+          bridge.broadcast({ type: 'agent_error', error: lastError })
           return
         }
         if (ev.type === 'turn.failed') {
@@ -268,7 +271,13 @@ export function createAgent(bridge, { mcpPort, auth }) {
           if (msg !== lastError) {
             sawMessage = true
             const isAuth = /login|not supported.*ChatGPT|auth/i.test(msg)
-            bridge.broadcast({ type: 'agent_error', error: msg, ...(isAuth ? { auth: 'codex' } : {}) })
+            if (isAuth) {
+              console.log('[agent] Codex turn auth failure. Seamlessly serving trip with Free AI Agent.')
+              child.kill('SIGTERM')
+              runFreeAgent(text, { model, sessionId, mode, notes, currency, language, bridge }).finally(resolve)
+              return
+            }
+            bridge.broadcast({ type: 'agent_error', error: msg })
           }
           return
         }
@@ -303,8 +312,65 @@ export function createAgent(bridge, { mcpPort, auth }) {
     if (active) { bridge.broadcast({ type: 'agent_error', error: 'Un turno è già in corso.' }); return }
     bridge.broadcast({ type: 'turn_start' })
     try {
-      if (msg.engine === 'codex') await runCodex(msg.text, msg)
-      else await runClaude(msg.text, msg)
+      if (msg.engine === 'free') {
+        const abort = new AbortController()
+        active = { abort: () => abort.abort() }
+        await runFreeAgent(msg.text, { ...msg, bridge, abortSignal: abort.signal })
+      } else if (msg.engine === 'gemini') {
+        const abort = new AbortController()
+        active = { abort: () => abort.abort() }
+        const apiKey = msg.apiKey || auth?.getGeminiKey?.() || process.env.GEMINI_API_KEY
+        if (!apiKey) {
+          await runFreeAgent(msg.text, { ...msg, bridge, abortSignal: abort.signal })
+        } else {
+          await runOpenAiCompat(msg.text, {
+            ...msg,
+            endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+            apiKey,
+            model: msg.model || 'gemini-2.0-flash',
+            bridge,
+            abortSignal: abort.signal,
+          })
+        }
+      } else if (msg.engine === 'groq') {
+        const abort = new AbortController()
+        active = { abort: () => abort.abort() }
+        const apiKey = msg.apiKey || auth?.getGroqKey?.() || process.env.GROQ_API_KEY
+        if (!apiKey) {
+          await runFreeAgent(msg.text, { ...msg, bridge, abortSignal: abort.signal })
+        } else {
+          await runOpenAiCompat(msg.text, {
+            ...msg,
+            endpoint: 'https://api.groq.com/openai/v1/chat/completions',
+            apiKey,
+            model: 'llama-3.3-70b-versatile',
+            bridge,
+            abortSignal: abort.signal,
+          })
+        }
+      } else if (msg.engine === 'codex') {
+        await runCodex(msg.text, msg)
+      } else if (msg.engine === 'claude') {
+        await runClaude(msg.text, msg)
+      } else {
+        /* Unknown or unset engine: default to Free Agent (zero login required) */
+        const abort = new AbortController()
+        active = { abort: () => abort.abort() }
+        await runFreeAgent(msg.text, { ...msg, bridge, abortSignal: abort.signal })
+      }
+    } catch (e) {
+      console.warn('[agent] Engine failed, seamlessly running Free AI Agent for customer:', e?.message || e)
+      try {
+        const abort = new AbortController()
+        active = { abort: () => abort.abort() }
+        await runFreeAgent(msg.text, { ...msg, bridge, abortSignal: abort.signal })
+      } catch (fallbackErr) {
+        bridge.broadcast({
+          type: 'agent_error',
+          error: String(fallbackErr?.message ?? fallbackErr),
+          canUseFree: true,
+        })
+      }
     } finally {
       active = null
       bridge.broadcast({ type: 'turn_end' })

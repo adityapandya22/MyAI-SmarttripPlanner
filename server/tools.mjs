@@ -6,8 +6,7 @@
 
 import { tool, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
 import { z } from 'zod'
-import { searchHotels } from './booking.mjs'
-import { searchRestaurants } from './places.mjs'
+import { searchHotels, searchRestaurants } from './providers/index.mjs'
 
 const ITEM_TYPES = z.enum(['activity', 'drive', 'food', 'hotel', 'info'])
 const TRANSPORT = z.enum(['car', 'walk', 'bus', 'train', 'plane', 'boat'])
@@ -90,11 +89,11 @@ export const TOOL_DEFS = [
       subtitle: z.string().optional(),
       start_date: z.string().optional(),
       transport: z.enum(['car', 'walk', 'transit', 'mixed']).optional(),
-      currency: z.enum(['USD', 'EUR']).optional().describe('valuta del viaggio: tutti i prezzi sono espressi in questa valuta'),
+      currency: z.enum(['INR', 'EUR', 'USD']).optional().describe('valuta del viaggio: tutti i prezzi sono espressi in questa valuta'),
       car_model: z.string().optional(),
       car_l_per_100km: z.number().positive().optional(),
       car_gas_price: z.number().positive().optional(),
-      car_gas_unit: z.enum(['usd_gal', 'usd_l', 'eur_l']).optional(),
+      car_gas_unit: z.enum(['usd_gal', 'usd_l', 'eur_l', 'inr_l']).optional(),
       car_gas_usd_per_gal: z.number().positive().optional().describe('deprecato: usa car_gas_price + car_gas_unit'),
     },
   },
@@ -132,7 +131,7 @@ export const TOOL_DEFS = [
             name: z.string(),
             price_per_night: z.number().min(0),
             total_price: z.number().min(0).optional(),
-            currency: z.enum(['EUR', 'USD']).optional(),
+            currency: z.enum(['INR', 'EUR', 'USD']).optional(),
             review_score: z.number().min(0).max(10).optional(),
             review_count: z.number().int().min(0).optional(),
             lat: z.number().optional().describe('da search_hotels: abilita mappa e distanza dal percorso'),
@@ -247,7 +246,7 @@ export const TOOL_DEFS = [
       checkout: z.string().describe('YYYY-MM-DD'),
       adults: z.number().int().min(1).max(10).optional().describe('default 2'),
       rooms: z.number().int().min(1).max(5).optional().describe('default 1'),
-      currency: z.enum(['EUR', 'USD']).optional().describe('valuta del viaggio'),
+      currency: z.enum(['INR', 'EUR', 'USD']).optional().describe('valuta del viaggio'),
       max_results: z.number().int().min(1).max(10).optional().describe('default 6'),
     },
     handler: searchHotels,

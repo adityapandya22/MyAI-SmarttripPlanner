@@ -165,7 +165,15 @@ Note for Windows: storage and the app itself work; the one-click guided *Claude*
 
 A **Claude subscription** (Pro/Max) and/or a **ChatGPT subscription** (Plus) — no API keys. You don't need the terminal: the first time an engine isn't connected the chat offers a **one-click guided sign-in** that drives the CLI login for you (the CLIs themselves ship with the repo's npm dependencies). The agent server reuses those logins — a personal, self-hosted setup; usage counts against your plans' limits. Without them, the whole app works normally and the chat reports what's missing.
 
-Ports are configurable: `AGENT_PORT` for the agent server, `VITE_AGENT_PORT` to point the web app at it (both default to 5200).
+### Environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `ULISSE_PLACES_PROVIDER` | `live` | Accommodation and restaurant search provider: `live` (scrapes Booking.com and Google Maps via headless Chrome) or `mock` (returns instant realistic fake data for demos, offline development, and tests without requiring a browser or network). |
+| `ULISSE_DATA_DIR` | `~/Documents/Ulisse` | Overrides the local data folder for trips, images, chats, and auth token. |
+| `ULISSE_CHROME` | Auto-detected | Custom path to a Chrome or Edge executable if not in standard locations. |
+| `AGENT_PORT` | `5200` | Port for the agent server (WebSocket and MCP over HTTP). |
+| `VITE_AGENT_PORT` | `5200` | Port the web app connects to for the agent server. |
 
 ## Project structure
 
@@ -219,6 +227,13 @@ server/
   auth.mjs                 guided in-app sign-in flows for both engines
   bridge.mjs               browser bridge: tool calls in, live edits out
   tools.mjs                shared tool definitions (SDK + MCP)
+  providers/               search provider abstraction (live scrapers + mock providers)
+    types.mjs              JSDoc types for HotelProvider & RestaurantProvider
+    bookingScraperProvider.mjs live Booking.com scraper provider
+    googleMapsScraperProvider.mjs live Google Maps scraper provider
+    mockHotelProvider.mjs  offline/demo realistic hotel mock provider
+    mockRestaurantProvider.mjs offline/demo realistic restaurant mock provider
+    index.mjs              provider factory switching on ULISSE_PLACES_PROVIDER
   booking.mjs              live Booking.com accommodation search (headless Chrome)
   places.mjs               live Google Maps restaurant search (headless Chrome)
   chrome.mjs               shared headless-browser infrastructure

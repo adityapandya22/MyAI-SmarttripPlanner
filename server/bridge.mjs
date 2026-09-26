@@ -40,7 +40,7 @@ export function createBridge(httpServer) {
       if (msg.type === 'chat' || msg.type === 'stop' || msg.type === 'reset' || msg.type === 'models_get') {
         chatHandler?.(msg, ws)
       }
-      if (msg.type?.startsWith('auth_')) {
+      if (msg.type?.startsWith('auth_') || msg.type?.startsWith('admin_')) {
         authHandler?.(msg, ws)
       }
     })
@@ -51,7 +51,7 @@ export function createBridge(httpServer) {
       /* a vanished tab can never answer: fail its pending calls now instead
          of letting a blocked ask_user hold the turn hostage for minutes */
       if (tabs.size === 0) {
-        for (const [id, { resolve, timer }] of pending) {
+        for (const [, { resolve, timer }] of pending) {
           clearTimeout(timer)
           resolve({ error: 'La scheda del browser si è chiusa prima di rispondere.' })
         }

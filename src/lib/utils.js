@@ -1,4 +1,4 @@
-import { eurUsd } from './fx'
+import { eurUsd, inrUsd } from './fx'
 import { CATS, classify } from './categories'
 import i18n from '../i18n'
 import { intlLocale } from '../i18n/locale'
@@ -51,8 +51,9 @@ export function gmapsUrl(lat, lng) {
   return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
 }
 
-export function fmtMoney(v, currency = 'USD') {
-  return new Intl.NumberFormat(intlLocale(), {
+export function fmtMoney(v, currency = 'INR') {
+  const locale = currency === 'INR' ? 'en-IN' : intlLocale()
+  return new Intl.NumberFormat(locale, {
     style: 'currency', currency, maximumFractionDigits: 0,
   }).format(Math.round(v))
 }
@@ -63,21 +64,28 @@ export function fmtKm(v) {
   }).format(Math.round(v))
 }
 
+/* default nightly prices used when migrating older saves without prices */
+export const LEGACY_HOTEL_PRICES = [180, 220, 230, 230, 250, 170, 0]
+
 /* fuel price units: how the user (or the agent) expressed the pump price.
    labelKey resolves through i18n at render time; `short` is symbol-only. */
 export const GAS_UNITS = {
+  inr_l: { labelKey: 'gas.inr_l', short: '₹/L', toUsdPerLiter: (p) => p / inrUsd() },
   usd_gal: { labelKey: 'gas.usd_gal', short: '$/gal', toUsdPerLiter: (p) => p / 3.78541 },
   usd_l: { labelKey: 'gas.usd_l', short: '$/L', toUsdPerLiter: (p) => p },
   eur_l: { labelKey: 'gas.eur_l', short: '€/L', toUsdPerLiter: (p) => p * eurUsd() },
 }
 
 /* fuel cost from car settings, in the trip currency: L/100km consumption +
-   pump price in any unit (converted through the live EUR/USD rate) */
-export function fuelCost(km, car, currency = 'USD') {
-  const liters = (km / 100) * (car?.lPer100 || 0)
+   pump price in any unit (converted through the live EUR/USD/INR rate) */
+export function fuelCost(km, car, currency = 'INR') {
+  const distance = Math.max(0, Number(km) || 0)
+  const liters = (distance / 100) * (Number(car?.lPer100) || 0)
   const unit = GAS_UNITS[car?.gasUnit] ?? GAS_UNITS.usd_gal
-  const usd = liters * unit.toUsdPerLiter(car?.gasPrice || 0)
-  return currency === 'EUR' ? usd / eurUsd() : usd
+  const usd = liters * unit.toUsdPerLiter(Number(car?.gasPrice) || 0)
+  if (currency === 'EUR') return usd / eurUsd()
+  if (currency === 'INR') return usd * inrUsd()
+  return usd
 }
 
 /* does this trip involve driving at all? (controls fuel badge + car settings) */
@@ -106,7 +114,7 @@ export function costByType(trip) {
 export const TRANSPORT_MODES = ['car', 'walk', 'bus', 'train', 'plane', 'boat']
 
 export function normalizeTrip(raw) {
-  const t = structuredClone(raw)
+  const t = raw && typeof raw === 'object' ? structuredClone(raw) : {}
   t.id ||= uid()
   t.title ||= i18n.t('store.myTrip')
   t.subtitle ||= ''
@@ -116,39 +124,43 @@ export function normalizeTrip(raw) {
   t.notes ||= ''
   t.transport = ['car', 'walk', 'transit', 'mixed'].includes(t.transport) ? t.transport : 'car'
   /* interview trips choose their currency before the first message */
-  t.currency = t.currency === 'EUR' || t.currency === 'USD' ? t.currency : t.phase === 'interview' ? null : 'USD'
+  t.currency = ['INR', 'EUR', 'USD'].includes(t.currency) ? t.currency : t.phase === 'interview' ? null : 'INR'
   /* map anchor for the chosen destination (set at start_planning, before any stop exists) */
   t.center = typeof t.center?.lat === 'number' && typeof t.center?.lng === 'number'
     ? { lat: t.center.lat, lng: t.center.lng } : null
   t.suggestions = Array.isArray(t.suggestions)
     ? t.suggestions.map((s) => ({
-        id: s.id ?? uid(),
-        title: s.title ?? '',
-        type: ['activity', 'food', 'hotel'].includes(s.type) ? s.type : 'activity',
-        category: CATS[s.category] ? s.category : classify(s.type, s.title),
-        dur: Number(s.dur) || 60,
-        notes: s.notes ?? '',
-        lat: typeof s.lat === 'number' ? s.lat : null,
-        lng: typeof s.lng === 'number' ? s.lng : null,
-        must: !!s.must,
-        links: Array.isArray(s.links) ? s.links : [],
+        id: s?.id ?? uid(),
+        title: s?.title ?? '',
+        type: ['activity', 'food', 'hotel'].includes(s?.type) ? s.type : 'activity',
+        category: CATS[s?.category] ? s.category : classify(s?.type, s?.title),
+        dur: Number(s?.dur) || 60,
+        notes: s?.notes ?? '',
+        lat: typeof s?.lat === 'number' ? s.lat : null,
+        lng: typeof s?.lng === 'number' ? s.lng : null,
+        must: !!s?.must,
+        links: Array.isArray(s?.links) ? s.links : [],
       }))
     : []
   /* legacy gasPerGal → gasPrice + explicit unit */
   t.car = {
     lPer100: Number(t.car?.lPer100) || 8.5,
-    gasPrice: Number(t.car?.gasPrice) || Number(t.car?.gasPerGal) || 4.8,
-    gasUnit: Object.keys(GAS_UNITS).includes(t.car?.gasUnit) ? t.car.gasUnit : 'usd_gal',
+    gasPrice: Number(t.car?.gasPrice) || Number(t.car?.gasPerGal) || (t.car?.gasUnit === 'inr_l' || t.currency === 'INR' ? 96 : 4.8),
+    gasUnit: Object.keys(GAS_UNITS).includes(t.car?.gasUnit)
+      ? t.car.gasUnit
+      : t.car?.gasPerGal
+      ? 'usd_gal'
+      : (t.currency === 'INR' ? 'inr_l' : 'usd_gal'),
     model: typeof t.car?.model === 'string' ? t.car.model : '',
   }
-  t.days = Array.isArray(t.days) ? t.days : []
-  t.checklist = Array.isArray(t.checklist) ? t.checklist : []
+  t.days = (Array.isArray(t.days) ? t.days : []).filter((d) => d && typeof d === 'object')
+  t.checklist = (Array.isArray(t.checklist) ? t.checklist : []).filter((c) => c && typeof c === 'object')
   t.days.forEach((d, i) => {
     d.id ||= uid()
     d.title ||= i18n.t('store.newDay')
     d.night ||= ''
     d.color ||= DAY_COLORS[i % DAY_COLORS.length]
-    d.items = Array.isArray(d.items) ? d.items : []
+    d.items = (Array.isArray(d.items) ? d.items : []).filter((it) => it && typeof it === 'object')
     d.items.forEach((it) => {
       it.id ||= uid()
       it.type = ['drive', 'activity', 'food', 'hotel', 'info'].includes(it.type) ? it.type : 'activity'
@@ -167,7 +179,7 @@ export function normalizeTrip(raw) {
       it.noWiki = !!it.noWiki
       it.sug ||= null
       it.category = CATS[it.category] ? it.category : null
-      it.price = Number(it.price) || 0
+      it.price = it.price != null ? (Number(it.price) || 0) : (it.type === 'hotel' ? (LEGACY_HOTEL_PRICES[i] ?? 0) : 0)
       if (typeof it.lat !== 'number' || typeof it.lng !== 'number') { it.lat = null; it.lng = null }
     })
   })

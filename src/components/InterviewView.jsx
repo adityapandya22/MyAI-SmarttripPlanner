@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation, Trans } from 'react-i18next'
 import {
   Send, Square, ChevronLeft, ChevronRight, TriangleAlert, NotebookPen, X,
-  Landmark, Mountain, Train, Sun,
+  Landmark, Mountain, Train, Sun, Sparkles, ShieldCheck,
 } from 'lucide-react'
 import { useAgentChat } from '../agent/socket'
 import { useTrip, activeTrip } from '../store'
@@ -11,8 +11,9 @@ import { DemoBadgeInline } from '../demo/DemoBadge'
 import Markdown from './Markdown'
 import PlanningStepper from './PlanningStepper'
 import QuestionCard, { QARecord, HotelPickRecord, RestaurantPickRecord } from './QuestionCard'
-import { groupMessages, ToolChipGroup, SetupCard, ModelPicker, AgentAvatar } from './chatShared'
+import { groupMessages, ToolChipGroup, ModelPicker, AgentAvatar } from './chatShared'
 import LanguageSwitcher from './LanguageSwitcher'
+import AdminModal from './AdminModal'
 
 const DEMO = import.meta.env.VITE_DEMO === '1'
 
@@ -26,23 +27,29 @@ export default function InterviewView() {
   const closeTrip = useTrip((s) => s.closeTrip)
   const setPhase = useTrip((s) => s.setPhase)
   const notes = useTrip((s) => activeTrip(s)?.notes ?? '')
+  const brief = useTrip((s) => activeTrip(s)?.brief ?? '')
   const currency = useTrip((s) => activeTrip(s)?.currency ?? null)
   const setCurrency = useTrip((s) => s.setCurrency)
   const [currencyNudge, setCurrencyNudge] = useState(false)
   const [text, setText] = useState('')
   const [showNotesMobile, setShowNotesMobile] = useState(false)
+  const [showAdminModal, setShowAdminModal] = useState(false)
   const scrollRef = useRef(null)
 
   const empty = messages.length === 0 && !streamText
 
-  /* demo: the conversation starts ready-made — Iceland prompt already in the
-     composer, EUR already chosen; the visitor only has to hit send */
+  /* prefill from trip brief (e.g. from Explore India) or demo prompt */
   useEffect(() => {
-    if (!DEMO || !empty) return
-    setText(demoPrompt(i18n.language))
-    if (!currency) setCurrency('EUR')
+    if (!empty) return
+    if (brief && !text) {
+      setText(brief)
+      if (!currency) setCurrency('INR')
+    } else if (DEMO && !text) {
+      setText(demoPrompt(i18n.language))
+      if (!currency) setCurrency('INR')
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [i18n.language, empty])
+  }, [i18n.language, empty, brief])
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -76,6 +83,18 @@ export default function InterviewView() {
         </button>
         <DemoBadgeInline />
         <div className="ml-auto flex items-center gap-2">
+          <div className="hidden sm:flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-800 border border-emerald-200">
+            <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Consumer Mode · No Key Needed</span>
+          </div>
+          <button
+            onClick={() => setShowAdminModal(true)}
+            className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-white/80 px-2.5 py-1 text-xs font-bold text-indigo-700 hover:bg-white transition"
+            title="Open Administrative Control Center"
+          >
+            <ShieldCheck size={14} className="text-indigo-600" />
+            <span className="hidden sm:inline">Admin</span>
+          </button>
           {notes && (
             <button
               onClick={() => setShowNotesMobile((v) => !v)}
@@ -108,16 +127,18 @@ export default function InterviewView() {
 
             <div className={empty ? '' : 'pt-2'}>
               <PlanningStepper />
-              {groupMessages(messages).map((m) => <Bubble key={m.id} m={m} />)}
+              <div aria-live="polite" aria-relevant="additions text" aria-atomic="false">
+                {groupMessages(messages).map((m) => <Bubble key={m.id} m={m} />)}
+              </div>
               {streamText && (
-                <div className="mb-3 max-w-[95%] text-[13.5px] leading-relaxed text-ink-800">
+                <div aria-live="polite" aria-atomic="false" className="mb-3 max-w-[95%] text-[13.5px] leading-relaxed text-ink-800">
                   <Markdown text={streamText} />
                   <span className="ml-0.5 inline-block h-3.5 w-[2px] animate-pulse rounded bg-violet-500 align-middle" />
                 </div>
               )}
               <QuestionCard />
               {thinking && !streamText && !pendingQuestion && (
-                <div className="flex items-center gap-2 text-xs font-semibold text-ink-400">
+                <div aria-live="polite" className="flex items-center gap-2 text-xs font-semibold text-ink-400">
                   <span className="flex gap-1">
                     <span className="size-1.5 animate-bounce rounded-full bg-violet-400" />
                     <span className="size-1.5 animate-bounce rounded-full bg-violet-400" style={{ animationDelay: '150ms' }} />
@@ -165,14 +186,6 @@ export default function InterviewView() {
               </p>
             </div>
 
-            {/* sign-in card when no engine is connected yet */}
-            {!connected && (
-              <div className={`transition-all duration-500 ${empty ? 'max-h-[480px] opacity-100' : 'max-h-0 overflow-hidden opacity-0'}`}>
-                <div className="mx-auto max-w-md pt-1 text-left">
-                  <SetupCard engine="claude" />
-                </div>
-              </div>
-            )}
             <div className="shrink-0 pb-4" />
           </div>
         </div>
@@ -189,6 +202,7 @@ export default function InterviewView() {
         )}
       </div>
 
+      <AdminModal open={showAdminModal} onClose={() => setShowAdminModal(false)} />
     </div>
   )
 }
@@ -262,6 +276,7 @@ function Composer({
           }}
           rows={1}
           placeholder={pendingQuestion ? t('interview.placeholderAnswer') : !connected ? t('interview.placeholderOffline') : needCurrency ? t('interview.placeholderCurrency') : t('interview.placeholder')}
+          aria-label={pendingQuestion ? t('interview.placeholderAnswer') : !connected ? t('interview.placeholderOffline') : needCurrency ? t('interview.placeholderCurrency') : t('interview.placeholder')}
           disabled={!connected || !!pendingQuestion}
           readOnly={demoLocked}
           className="max-h-32 min-h-10 w-full resize-none bg-transparent px-2 py-2 text-sm text-ink-800 outline-none placeholder:text-ink-300 disabled:opacity-50"
@@ -296,13 +311,21 @@ function Composer({
           </span>
         ) : (
           <div
+            role="radiogroup"
+            aria-label={t('interview.currency') || 'Currency'}
             className={`flex shrink-0 items-center gap-1 rounded-xl p-0.5 transition ${
               currencyNudge ? 'animate-bounce bg-rose-50 ring-2 ring-rose-300' : needCurrency ? 'bg-violet-50 ring-1 ring-violet-200' : ''
             }`}
           >
-            {[['EUR', t('interview.currencyEUR')], ['USD', t('interview.currencyUSD')]].map(([code, label]) => (
+            {[
+              ['INR', t('interview.currencyINR') || '₹ Rupee'],
+              ['EUR', t('interview.currencyEUR') || '€ Euro'],
+              ['USD', t('interview.currencyUSD') || '$ Dollar'],
+            ].map(([code, label]) => (
               <button
                 key={code}
+                role="radio"
+                aria-checked={currency === code}
                 onClick={() => setCurrency(code)}
                 className={`rounded-lg px-2 py-1 text-[11px] font-bold transition ${
                   currency === code ? 'bg-violet-600 text-white shadow-sm' : 'text-ink-500 hover:bg-ink-100 hover:text-ink-800'
@@ -392,12 +415,46 @@ function Bubble({ m }) {
   if (m.role === 'qa') return <QARecord m={m} />
   if (m.role === 'hotelpick') return <HotelPickRecord m={m} />
   if (m.role === 'restpick') return <RestaurantPickRecord m={m} />
-  if (m.role === 'setup') return <SetupCard engine={m.engine} error={m.text} />
   if (m.role === 'toolgroup') return <ToolChipGroup group={m} />
+  if (m.role === 'setup') {
+    return (
+      <div className="mb-3 rounded-2xl border border-emerald-200 bg-emerald-50/80 p-3.5 shadow-sm text-left">
+        <div className="flex items-center gap-2 text-[12.5px] font-bold text-emerald-900">
+          <Sparkles size={15} className="text-emerald-600" />
+          <span>Ulisse AI Planner</span>
+        </div>
+        <p className="mt-1 text-[11.5px] leading-relaxed text-emerald-800">
+          Ready to build your complete itinerary in ₹ Rupees with zero logins, zero subscriptions, and zero API keys needed!
+        </p>
+        <button
+          onClick={() => {
+            useAgentChat.getState().select('free', 'smart-planner')
+            setTimeout(() => useAgentChat.getState().resendLast(), 100)
+          }}
+          className="mt-2.5 inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-1.5 text-[11.5px] font-bold text-white shadow-sm hover:bg-emerald-700 active:scale-95 transition"
+        >
+          ⚡ Plan Trip Now (Free & Instant)
+        </button>
+      </div>
+    )
+  }
   return (
-    <div className="mb-3 flex items-start gap-2 rounded-xl bg-rose-50 px-3 py-2 text-[12px] leading-snug text-rose-700 ring-1 ring-rose-200">
-      <TriangleAlert size={13} className="mt-0.5 shrink-0" />
-      {m.text}
+    <div className="mb-3 rounded-xl bg-rose-50 p-3 text-[12px] leading-snug text-rose-700 ring-1 ring-rose-200">
+      <div className="flex items-start gap-2">
+        <TriangleAlert size={14} className="mt-0.5 shrink-0" />
+        <div className="flex-1">{m.text}</div>
+      </div>
+      {m.canUseFree && (
+        <button
+          onClick={() => {
+            useAgentChat.getState().select('free', 'smart-planner')
+            setTimeout(() => useAgentChat.getState().resendLast(), 100)
+          }}
+          className="mt-2.5 flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 active:scale-95 transition"
+        >
+          ⚡ Switch to Free AI Agent (No Login Required)
+        </button>
+      )}
     </div>
   )
 }

@@ -161,6 +161,41 @@ export function createAuth(bridge, { codexBin, getAuthPath }) {
     else if (msg.type === 'auth_start' && msg.engine === 'claude') startClaude()
     else if (msg.type === 'auth_code' && flow?.engine === 'claude' && typeof msg.code === 'string') {
       flow.child.stdin.write(msg.code.trim() + '\n')
+    } else if (msg.type === 'auth_save_key' && (msg.engine === 'gemini' || msg.engine === 'groq')) {
+      const authData = loadAuthFile()
+      if (msg.engine === 'gemini') authData.geminiKey = msg.key
+      if (msg.engine === 'groq') authData.groqKey = msg.key
+      writeFileSync(authFile(), JSON.stringify(authData, null, 2), { mode: 0o600 })
+      send({ engine: msg.engine, phase: 'done' })
+    } else if (msg.type === 'admin_get_config') {
+      const authData = loadAuthFile()
+      const gemKey = process.env.GEMINI_API_KEY || authData.geminiKey || ''
+      const groqKey = process.env.GROQ_API_KEY || authData.groqKey || ''
+      bridge.broadcast({
+        type: 'admin_config',
+        hasGeminiKey: !!gemKey,
+        hasGroqKey: !!groqKey,
+        geminiKeyPreview: gemKey ? `${gemKey.slice(0, 6)}••••••••${gemKey.slice(-4)}` : '',
+        groqKeyPreview: groqKey ? `${groqKey.slice(0, 6)}••••••••${groqKey.slice(-4)}` : '',
+        defaultEngine: authData.defaultEngine || 'free',
+      })
+    } else if (msg.type === 'admin_set_config') {
+      const authData = loadAuthFile()
+      if (typeof msg.geminiKey === 'string') authData.geminiKey = msg.geminiKey.trim()
+      if (typeof msg.groqKey === 'string') authData.groqKey = msg.groqKey.trim()
+      if (msg.defaultEngine) authData.defaultEngine = msg.defaultEngine
+      writeFileSync(authFile(), JSON.stringify(authData, null, 2), { mode: 0o600 })
+      const gemKey = process.env.GEMINI_API_KEY || authData.geminiKey || ''
+      const groqKey = process.env.GROQ_API_KEY || authData.groqKey || ''
+      bridge.broadcast({
+        type: 'admin_config',
+        hasGeminiKey: !!gemKey,
+        hasGroqKey: !!groqKey,
+        geminiKeyPreview: gemKey ? `${gemKey.slice(0, 6)}••••••••${gemKey.slice(-4)}` : '',
+        groqKeyPreview: groqKey ? `${groqKey.slice(0, 6)}••••••••${groqKey.slice(-4)}` : '',
+        defaultEngine: authData.defaultEngine || 'free',
+        saved: true,
+      })
     } else if (msg.type === 'auth_cancel') {
       endFlow()
     }
@@ -169,5 +204,8 @@ export function createAuth(bridge, { codexBin, getAuthPath }) {
   return {
     /* long-lived token captured by the guided flow, if any */
     getClaudeToken: () => loadAuthFile().claudeToken ?? null,
+    getGeminiKey: () => (process.env.GEMINI_API_KEY || loadAuthFile().geminiKey) ?? null,
+    getGroqKey: () => (process.env.GROQ_API_KEY || loadAuthFile().groqKey) ?? null,
+    getDefaultEngine: () => loadAuthFile().defaultEngine || 'free',
   }
 }

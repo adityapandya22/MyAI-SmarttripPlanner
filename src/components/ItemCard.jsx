@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { useTrip, useUI, toast, activeTrip } from '../store'
 import { fmtDur, fmtMoney, gmapsUrl } from '../lib/utils'
-import { TYPE_META, itemMeta } from './typeMeta'
+import { itemMeta } from './typeMeta'
 import { ItemThumb } from './ItemImage'
 
 export default function ItemCard({ item, day, isLast, stopNumber }) {
@@ -55,6 +55,8 @@ export default function ItemCard({ item, day, isLast, stopNumber }) {
         <button
           onClick={() => toggleDone(day.id, item.id)}
           title={item.done ? t('item.markTodo') : t('item.markDone')}
+          aria-label={item.done ? t('item.markTodo') : t('item.markDone')}
+          aria-pressed={item.done}
           style={stopNumber && !item.done ? { background: day.color, borderColor: day.color } : undefined}
           className={`grid size-8 shrink-0 place-items-center rounded-full ring-1 transition hover:scale-110 ${
             item.done
@@ -179,6 +181,7 @@ export default function ItemCard({ item, day, isLast, stopNumber }) {
           >
             <button
               title={t('common.edit')}
+              aria-label={t('common.edit')}
               onClick={() => openEditor(day.id, item.id)}
               className="grid size-6 place-items-center rounded-md text-ink-300 transition hover:bg-ink-100 hover:text-ink-600"
             >
@@ -186,6 +189,7 @@ export default function ItemCard({ item, day, isLast, stopNumber }) {
             </button>
             <button
               title={t('common.delete')}
+              aria-label={t('common.delete')}
               onClick={() =>
                 ask(t('item.confirmDelete', { title: item.title }), () => {
                   removeItem(day.id, item.id)

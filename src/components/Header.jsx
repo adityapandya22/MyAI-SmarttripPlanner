@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import {
   Palmtree, PlaneTakeoff, Download, Upload, Plus, CarFront, MapPin, CalendarDays, Route, BedDouble,
   Fuel, Wallet, ChevronLeft, ChevronDown, UtensilsCrossed, Ticket, Receipt, Bot, Gauge, MoreHorizontal, Globe,
+  ShieldCheck,
 } from 'lucide-react'
 import { LANGS } from '../i18n/langs'
 import { useTrip, useUI, useRoutes, toast, activeTrip } from '../store'
@@ -16,6 +17,7 @@ import DatePicker, { CalendarPanel } from './DatePicker'
 import LanguageSwitcher from './LanguageSwitcher'
 import Modal from './Modal'
 import { DemoBadgeInline } from '../demo/DemoBadge'
+import AdminModal from './AdminModal'
 
 export default function Header() {
   const { t } = useTranslation()
@@ -23,6 +25,7 @@ export default function Header() {
   const setTitle = useTrip((s) => s.setTitle)
   const importTrip = useTrip((s) => s.importTrip)
   const closeTrip = useTrip((s) => s.closeTrip)
+  const [showAdminModal, setShowAdminModal] = useState(false)
   const openDayEditor = useUI((s) => s.openDayEditor)
   const roadKmByDay = useRoutes((s) => s.byDay)
   const fileRef = useRef(null)
@@ -145,6 +148,14 @@ export default function Header() {
           <IconBtn className="hidden lg:@[48rem]:grid" title={t('header.exportTooltip')} onClick={onExport}><Download size={17} /></IconBtn>
           <IconBtn className="hidden lg:@[48rem]:grid" title={t('header.importTooltip')} onClick={() => fileRef.current?.click()}><Upload size={17} /></IconBtn>
           <div className="hidden lg:@[34rem]:block"><LanguageSwitcher compact /></div>
+          <button
+            onClick={() => setShowAdminModal(true)}
+            title="Admin Portal (Backend API Keys & System Configuration)"
+            className="hidden lg:flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50/70 px-2.5 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition"
+          >
+            <ShieldCheck size={14} className="text-indigo-600" />
+            <span className="hidden @[64rem]:inline">Admin</span>
+          </button>
           <MoreMenu onExport={onExport} onImport={() => fileRef.current?.click()} onCar={usesCar ? () => setMobilePanel('car') : null} />
           <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={onImportFile} />
         </div>
@@ -203,6 +214,7 @@ export default function Header() {
           </div>
         </Modal>
       )}
+      <AdminModal open={showAdminModal} onClose={() => setShowAdminModal(false)} />
     </header>
   )
 }

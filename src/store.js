@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import seedIt from './data/seed.it.json'
 import seedEn from './data/seed.en.json'
-import { normalizeTrip, uid, DAY_COLORS } from './lib/utils'
+import { normalizeTrip, uid, DAY_COLORS, LEGACY_HOTEL_PRICES } from './lib/utils'
 /* i18n is initialized before this module (see main.jsx import order):
    defaults below are evaluated lazily, but the seed language is read here */
 import i18n from './i18n'
@@ -19,9 +19,6 @@ const blankTrip = (title, phase = 'active') =>
     days: phase === 'interview' ? [] : [{ title: i18n.t('common.dayN', { n: 1 }), night: '', color: DAY_COLORS[0], items: [] }],
     checklist: [],
   })
-
-/* default nightly prices used when migrating older saves without prices */
-const LEGACY_HOTEL_PRICES = [180, 220, 230, 230, 250, 170, 0]
 
 export const activeTrip = (s) => s.trips.find((t) => t.id === s.activeId)
 

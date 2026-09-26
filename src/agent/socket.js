@@ -42,10 +42,16 @@ export const useChats = create(
 const CLAUDE_MODELS = ['sonnet', 'opus', 'haiku']
 /* fallback until the server sends the CLI's real list (codex_models event) */
 const CODEX_MODELS = ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini']
+const GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash']
+const VALID_ENGINES = ['free', 'gemini', 'claude', 'codex']
+
 const storedFor = (engine, fallback, valid) => {
   const v = localStorage.getItem(`agent.model.${engine}`)
   return valid.includes(v) ? v : fallback
 }
+
+const savedEngine = localStorage.getItem('agent.engine')
+const initialEngine = savedEngine === 'gemini' ? 'gemini' : 'free'
 
 export const useAgentChat = create((set, get) => ({
   connected: false,
@@ -54,8 +60,10 @@ export const useAgentChat = create((set, get) => ({
   panelW: 0,
   messages: [],
   streamText: '',
-  engine: localStorage.getItem('agent.engine') === 'codex' ? 'codex' : 'claude',
+  engine: initialEngine,
   models: {
+    free: 'smart-planner',
+    gemini: storedFor('gemini', 'gemini-2.0-flash', GEMINI_MODELS),
     claude: storedFor('claude', 'sonnet', CLAUDE_MODELS),
     codex: storedFor('codex', 'gpt-5.4', CODEX_MODELS),
   },
@@ -90,8 +98,13 @@ export const useAgentChat = create((set, get) => ({
   setShowEdits: (showEdits) => set({ showEdits }),
   /* explicit engine+model selection: nothing is ever picked at random */
   select(engine, model) {
-    const valid = engine === 'codex' ? (get().codexModels?.map((m) => m.id) ?? CODEX_MODELS) : CLAUDE_MODELS
-    const m = valid.includes(model) ? model : valid.includes(get().models[engine]) ? get().models[engine] : valid[1] ?? valid[0]
+    let valid
+    if (engine === 'free') valid = ['smart-planner']
+    else if (engine === 'gemini') valid = GEMINI_MODELS
+    else if (engine === 'codex') valid = (get().codexModels?.map((m) => m.id) ?? CODEX_MODELS)
+    else valid = CLAUDE_MODELS
+
+    const m = valid.includes(model) ? model : valid.includes(get().models[engine]) ? get().models[engine] : valid[0]
     localStorage.setItem('agent.engine', engine)
     localStorage.setItem(`agent.model.${engine}`, m)
     if (engine !== get().engine && get().messages.length) get().newChat()
@@ -115,14 +128,16 @@ export const useAgentChat = create((set, get) => ({
     persistChat()
     const phase = activeTrip(useTrip.getState())?.phase
     const trip = activeTrip(useTrip.getState())
+    const apiKey = localStorage.getItem(`agent.key.${get().engine}`) || null
     sendWs({
       type: 'chat', text: t,
       model: get().models[get().engine],
       engine: get().engine,
+      apiKey,
       sessionId: get().sessionId,
       mode: phase === 'interview' ? 'interview' : 'planner',
       notes: trip?.notes ?? '',
-      currency: trip?.currency ?? 'USD',
+      currency: trip?.currency ?? 'INR',
       language: i18n.language,
     })
   },
@@ -136,14 +151,16 @@ export const useAgentChat = create((set, get) => ({
     if (!lastUser || get().thinking || !get().connected) return
     set({ undoReady: false, undoSnapshot: null, edits: [], progress: [], showEdits: false, streamText: '' })
     const trip = activeTrip(useTrip.getState())
+    const apiKey = localStorage.getItem(`agent.key.${get().engine}`) || null
     sendWs({
       type: 'chat', text: lastUser.text,
       model: get().models[get().engine],
       engine: get().engine,
+      apiKey,
       sessionId: get().sessionId,
       mode: trip?.phase === 'interview' ? 'interview' : 'planner',
       notes: trip?.notes ?? '',
-      currency: trip?.currency ?? 'USD',
+      currency: trip?.currency ?? 'INR',
       language: i18n.language,
     })
   },
@@ -162,7 +179,7 @@ export const useAgentChat = create((set, get) => ({
       messages: chat.messages ?? [],
       chatId: chat.id,
       sessionId: chat.sessionId ?? null,
-      engine: chat.engine ?? 'claude',
+      engine: chat.engine ?? get().engine,
       undoReady: false, undoSnapshot: null, edits: [], progress: [], showEdits: false, thinking: false, streamText: '',
     })
   },
@@ -331,6 +348,10 @@ function sendWs(obj) {
   if (ws?.readyState === 1) ws.send(JSON.stringify(obj))
 }
 
+export function sendAdminMessage(obj) {
+  sendWs(obj)
+}
+
 const push = (msg) => useAgentChat.setState((s) => ({ messages: [...s.messages, { id: uid(), ...msg }] }))
 
 async function handleToolCall(msg) {
@@ -372,8 +393,8 @@ function handleEvent(msg) {
       }
       break
     case 'agent_error':
-      if (msg.auth) push({ role: 'setup', engine: msg.auth, text: msg.error })
-      else push({ role: 'error', text: msg.error })
+      if (msg.auth) push({ role: 'setup', engine: msg.auth, text: msg.error, canUseFree: !!msg.canUseFree })
+      else push({ role: 'error', text: msg.error, canUseFree: !!msg.canUseFree })
       break
     case 'codex_models': {
       /* the CLI's currently valid slugs: heal a stale saved selection */
@@ -409,6 +430,9 @@ function handleEvent(msg) {
     case 'session':
       useAgentChat.setState({ sessionId: msg.sessionId })
       persistChat()
+      break
+    case 'admin_config':
+      window.dispatchEvent(new CustomEvent('ulisse:admin_config', { detail: msg }))
       break
     case 'turn_start':
       useAgentChat.setState({ thinking: true })

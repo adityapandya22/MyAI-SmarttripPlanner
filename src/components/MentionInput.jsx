@@ -164,7 +164,7 @@ const MentionInput = forwardRef(function MentionInput({ disabled, placeholder, o
         contentEditable={!disabled}
         role="textbox"
         aria-multiline="true"
-        aria-label={t('mention.ariaLabel')}
+        aria-label={placeholder || t('mention.ariaLabel')}
         data-mention-input
         onInput={() => { refreshMenu(); notifyEmpty() }}
         onKeyUp={refreshMenu}

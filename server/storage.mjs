@@ -16,6 +16,7 @@ import { execFileSync } from 'node:child_process'
 import { join, resolve, dirname, basename, isAbsolute } from 'node:path'
 import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
+import { z } from 'zod'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -84,6 +85,132 @@ const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(
 const IMG_MIME = { jpg: 'image/jpeg', webp: 'image/webp', png: 'image/png' }
 const EXT_BY_MIME = { 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/png': 'png' }
 const IMG_FILE_RE = /^[a-z0-9]+\.(jpg|webp|png)$/
+
+/* ---------- trip schema validation (zod) ---------- */
+
+export const LinkSchema = z
+  .object({
+    label: z.string().optional().default(''),
+    url: z.string().optional().default(''),
+  })
+  .passthrough()
+
+export const ItemSchema = z
+  .object({
+    id: z.string().optional(),
+    type: z.enum(['activity', 'drive', 'food', 'hotel', 'info']).optional(),
+    title: z.string().optional(),
+    time: z.string().optional(),
+    dur: z.number().optional(),
+    price: z.number().nullable().optional(),
+    notes: z.string().optional(),
+    lat: z.number().nullable().optional(),
+    lng: z.number().nullable().optional(),
+    links: z.array(z.union([z.string(), LinkSchema])).optional(),
+    must: z.boolean().optional(),
+    done: z.boolean().optional(),
+    mode: z.enum(['car', 'walk', 'bus', 'train', 'plane', 'boat']).nullable().optional(),
+    imgs: z.array(z.string()).optional(),
+    img: z.string().optional(),
+    noWiki: z.boolean().optional(),
+    sug: z.string().nullable().optional(),
+    category: z.string().nullable().optional(),
+  })
+  .passthrough()
+
+export const DaySchema = z
+  .object({
+    id: z.string().optional(),
+    title: z.string().optional(),
+    night: z.string().optional(),
+    color: z.string().optional(),
+    items: z.array(ItemSchema).optional(),
+  })
+  .passthrough()
+
+export const ChecklistItemSchema = z
+  .object({
+    id: z.string().optional(),
+    text: z.string().optional(),
+    done: z.boolean().optional(),
+    link: z.string().optional(),
+  })
+  .passthrough()
+
+export const SuggestionSchema = z
+  .object({
+    id: z.string().optional(),
+    title: z.string().optional(),
+    type: z.enum(['activity', 'food', 'hotel']).optional(),
+    category: z.string().nullable().optional(),
+    dur: z.number().optional(),
+    notes: z.string().optional(),
+    lat: z.number().nullable().optional(),
+    lng: z.number().nullable().optional(),
+    must: z.boolean().optional(),
+    links: z.array(z.union([z.string(), LinkSchema])).optional(),
+  })
+  .passthrough()
+
+export const CarSchema = z
+  .object({
+    lPer100: z.number().optional(),
+    gasPrice: z.number().optional(),
+    gasPerGal: z.number().optional(),
+    gasUnit: z.enum(['usd_gal', 'usd_l', 'eur_l', 'inr_l']).optional(),
+    model: z.string().optional(),
+  })
+  .passthrough()
+
+export const CenterSchema = z
+  .object({
+    lat: z.number(),
+    lng: z.number(),
+  })
+  .nullable()
+  .optional()
+
+export const TripSchema = z
+  .object({
+    id: z.string({ error: 'Trip id is required' }).min(1, 'Trip id is required'),
+    title: z.string().optional(),
+    subtitle: z.string().optional(),
+    startDate: z.string().optional(),
+    phase: z.enum(['interview', 'active']).optional(),
+    brief: z.string().optional(),
+    notes: z.string().optional(),
+    transport: z.enum(['car', 'walk', 'transit', 'mixed']).optional(),
+    currency: z.enum(['INR', 'EUR', 'USD']).nullable().optional(),
+    center: CenterSchema,
+    days: z.array(DaySchema).optional(),
+    checklist: z.array(ChecklistItemSchema).optional(),
+    suggestions: z.array(SuggestionSchema).optional(),
+    car: CarSchema.optional(),
+  })
+  .passthrough()
+
+export const ImportTripSchema = TripSchema.extend({
+  id: z.string().min(1).optional(),
+})
+
+export function formatZodError(error) {
+  if (!error?.issues?.length) return 'Unknown validation error'
+  return error.issues
+    .map((issue) => `${issue.path.join('.') || 'root'}: ${issue.message}`)
+    .join('; ')
+}
+
+export function validateTrip(rawTrip, { requireId = true } = {}) {
+  if (!rawTrip || typeof rawTrip !== 'object' || Array.isArray(rawTrip)) {
+    throw new Error('Trip data must be a valid non-empty object')
+  }
+  const schema = requireId ? TripSchema : ImportTripSchema
+  const result = schema.safeParse(rawTrip)
+  if (!result.success) {
+    throw new Error(`Trip validation error: ${formatZodError(result.error)}`)
+  }
+  return result.data
+}
 
 /* ---------- storage ---------- */
 
@@ -161,8 +288,8 @@ export function createStorage(bridge) {
     for (const f of listTripFiles()) {
       const full = join(tripsDir(), f)
       try {
-        const t = readJson(full)
-        if (!t || typeof t.id !== 'string') throw new Error('missing trip id')
+        const raw = readJson(full)
+        const t = validateTrip(raw, { requireId: true })
         const prev = seen.get(t.id)
         const mtime = statSync(full).mtimeMs
         if (prev && prev.mtime >= mtime) {
@@ -183,21 +310,29 @@ export function createStorage(bridge) {
       ?? listTripFiles().find((f) => { try { return readJson(join(tripsDir(), f)).id === id } catch { return false } })
 
   function saveTrip(trip) {
-    const safeId = String(trip.id).replace(/[^a-z0-9-]/gi, '')
-    const name = `${slugify(trip.title)}--${safeId}.json`
+    const validated = validateTrip(trip, { requireId: true })
+    const safeId = String(validated.id).replace(/[^a-z0-9-]/gi, '')
+    const name = `${slugify(validated.title)}--${safeId}.json`
     const target = join(tripsDir(), name)
-    const existing = fileForId(trip.id)
+    const existing = fileForId(validated.id)
     /* rotate the previous content into .backups before overwriting */
     if (existing) {
       try { copyFileSync(join(tripsDir(), existing), join(backupsDir(), existing)) } catch { /* best effort */ }
     }
     markOwn(target)
-    writeJsonAtomic(target, trip)
+    writeJsonAtomic(target, validated)
     if (existing && existing !== name) {
       markOwn(join(tripsDir(), existing))
       try { unlinkSync(join(tripsDir(), existing)) } catch { /* already gone */ }
     }
     return `trips/${name}`
+  }
+
+  function importTrip(rawTrip) {
+    const validated = validateTrip(rawTrip, { requireId: false })
+    if (!validated.id) validated.id = uid()
+    saveTrip(validated)
+    return validated
   }
 
   function deleteTrip(id) {
@@ -332,10 +467,43 @@ export function createStorage(bridge) {
       }
       const tripM = url.match(/^\/storage\/trips\/([a-z0-9-]+)$/i)
       if (tripM && req.method === 'PUT') {
-        const trip = JSON.parse(await readBody(req))
-        if (trip?.id !== tripM[1]) { send(res, 400, { error: 'id mismatch' }); return true }
+        let raw
+        try {
+          raw = JSON.parse(await readBody(req))
+        } catch (e) {
+          send(res, 400, { error: 'invalid JSON: ' + String(e?.message ?? e) })
+          return true
+        }
+        if (raw?.id !== tripM[1]) { send(res, 400, { error: 'id mismatch' }); return true }
+        let trip
+        try {
+          trip = validateTrip(raw, { requireId: true })
+        } catch (e) {
+          send(res, 400, { error: String(e?.message ?? e) })
+          return true
+        }
         await serialize(trip.id, () => saveTrip(trip))
         send(res, 200, { ok: true })
+        return true
+      }
+      if ((url === '/storage/trips' || url === '/storage/import') && req.method === 'POST') {
+        let raw
+        try {
+          raw = JSON.parse(await readBody(req, 64 * 1024 * 1024))
+        } catch (e) {
+          send(res, 400, { error: 'invalid JSON: ' + String(e?.message ?? e) })
+          return true
+        }
+        let trip
+        try {
+          trip = validateTrip(raw, { requireId: false })
+        } catch (e) {
+          send(res, 400, { error: String(e?.message ?? e) })
+          return true
+        }
+        if (!trip.id) trip.id = uid()
+        const savedPath = await serialize(trip.id, () => saveTrip(trip))
+        send(res, 200, { ok: true, trip, path: savedPath })
         return true
       }
       if (tripM && req.method === 'DELETE') {
@@ -399,7 +567,13 @@ export function createStorage(bridge) {
         if (listTripFiles().length > 0) { send(res, 409, { error: 'not empty' }); return true }
         const { trips = [], chatsByTrip = {} } = JSON.parse(await readBody(req, 64 * 1024 * 1024))
         let written = 0
-        for (const t of trips) { if (t?.id) { saveTrip(t); written++ } }
+        for (const t of trips) {
+          if (t) {
+            const validated = validateTrip(t, { requireId: true })
+            saveTrip(validated)
+            written++
+          }
+        }
         for (const [id, chats] of Object.entries(chatsByTrip)) {
           if (/^[a-z0-9-]+$/i.test(id)) writeJsonAtomic(join(chatsDir(), `${id}.json`), chats)
         }
@@ -417,6 +591,11 @@ export function createStorage(bridge) {
 
   return {
     handle,
+    scanTrips,
+    saveTrip,
+    importTrip,
+    deleteTrip,
+    validateTrip,
     /* auth.mjs asks lazily on every read/write */
     getAuthPath: () => (dataDir ? join(dataDir, 'auth.json') : null),
   }

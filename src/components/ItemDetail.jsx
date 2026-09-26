@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { useTrip, useUI, toast, activeTrip } from '../store'
 import { fmtDur, fmtMoney, gmapsUrl } from '../lib/utils'
-import { TYPE_META, itemMeta } from './typeMeta'
+import { itemMeta } from './typeMeta'
 import { useItemImages } from './ItemImage'
 import Modal from './Modal'
 

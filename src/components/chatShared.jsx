@@ -13,7 +13,7 @@ import i18n from '../i18n'
 export const TOOL_META = {
   get_trip: { Icon: Route, label: () => i18n.t('chat.tools.get_trip') },
   get_route_info: { Icon: Route, label: () => i18n.t('chat.tools.get_route_info') },
-  get_place_images: { Icon: Camera, label: (a) => i18n.t('chat.tools.get_place_images') },
+  get_place_images: { Icon: Camera, label: () => i18n.t('chat.tools.get_place_images') },
   add_activity: { Icon: MapPin, label: (a) => i18n.t('chat.tools.add_activity', { title: a.title ?? i18n.t('chat.tools.activityFallback') }) },
   update_activity: { Icon: Pencil, label: (a, r) => i18n.t('chat.tools.update_activity', { title: r?.title ?? a.title ?? i18n.t('chat.tools.activityFallback') }) },
   remove_activity: { Icon: Trash2, label: (a, r) => i18n.t('chat.tools.remove_activity', { title: r?.removed ?? i18n.t('chat.tools.activityFallback') }) },
@@ -163,8 +163,10 @@ export function SetupCard({ engine, error }) {
   const auth = useAgentChat((s) => s.auth)
   const startAuth = useAgentChat((s) => s.startAuth)
   const sendAuthCode = useAgentChat((s) => s.sendAuthCode)
+  const select = useAgentChat((s) => s.select)
   const [code, setCode] = useState('')
   const [manual, setManual] = useState(false)
+  const [geminiKey, setGeminiKey] = useState(localStorage.getItem('agent.key.gemini') || '')
 
   const mine = auth.engine === engine ? auth : { phase: 'idle' }
 
@@ -245,10 +247,71 @@ export function SetupCard({ engine, error }) {
           </>
         )}
 
+        {/* Free AI Agent alternative: No subscription, no login needed */}
+        <div className="mt-3.5 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800">
+            <Sparkles size={14} className="text-emerald-600 shrink-0" />
+            <span>No paid subscription? Use Free AI Agent</span>
+          </div>
+          <p className="mt-1 text-[11px] leading-snug text-emerald-700">
+            Ulisse can plan your trip right now with zero logins, zero subscriptions, and zero paid API keys!
+          </p>
+          <button
+            onClick={() => {
+              select('free', 'smart-planner')
+              setTimeout(() => useAgentChat.getState().resendLast(), 100)
+            }}
+            className="mt-2.5 flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 active:scale-95 transition"
+          >
+            ⚡ Continue with Free AI Agent
+          </button>
+        </div>
+
+        {/* Free Google Gemini API Key option */}
+        <div className="mt-2.5 rounded-xl border border-blue-200 bg-blue-50/60 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-bold text-blue-900 flex items-center gap-1">
+              🔑 Or use Free Google Gemini API
+            </span>
+            <a
+              href="https://aistudio.google.com/app/apikey"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[10.5px] font-bold text-blue-600 underline hover:text-blue-800"
+            >
+              Get Free Key →
+            </a>
+          </div>
+          <p className="mt-1 text-[10.5px] text-blue-700">
+            Google AI Studio offers 100% free keys (15 requests/min, no credit card required).
+          </p>
+          <div className="mt-2 flex items-center gap-1.5">
+            <input
+              type="password"
+              placeholder="Paste Gemini API key (AIzaSy...)"
+              value={geminiKey}
+              onChange={(e) => setGeminiKey(e.target.value)}
+              className="min-w-0 flex-1 rounded-lg border border-blue-200 bg-white px-2.5 py-1 text-xs outline-none focus:ring-1 focus:ring-blue-400"
+            />
+            <button
+              onClick={() => {
+                if (!geminiKey.trim()) return
+                localStorage.setItem('agent.key.gemini', geminiKey.trim())
+                select('gemini', 'gemini-2.0-flash')
+                setTimeout(() => useAgentChat.getState().resendLast(), 100)
+              }}
+              disabled={!geminiKey.trim()}
+              className="rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-40 transition"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+
         {/* terminal fallback for who prefers it */}
         <button
           onClick={() => setManual((m) => !m)}
-          className="mt-2.5 flex items-center gap-1 text-[10.5px] font-semibold text-ink-400 transition hover:text-ink-600"
+          className="mt-3 flex items-center gap-1 text-[10.5px] font-semibold text-ink-400 transition hover:text-ink-600"
         >
           <ChevronDown size={10} className={`transition-transform ${manual ? 'rotate-180' : ''}`} />
           {t('chat.setup.preferTerminal')}
@@ -295,6 +358,25 @@ function CopyCmd({ cmd }) {
 /* ---------- engine + model picker ---------- */
 
 const ENGINES = [
+  {
+    id: 'free',
+    name: 'Free AI Agent',
+    badge: '100% Free · No Login',
+    noteKey: 'chat.models.freeNote',
+    models: [
+      { id: 'smart-planner', label: 'Ulisse AI Planner', noteKey: 'chat.models.smartPlanner' },
+    ],
+  },
+  {
+    id: 'gemini',
+    name: 'Google Gemini',
+    badge: 'Free API Key',
+    noteKey: 'chat.models.geminiNote',
+    models: [
+      { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', noteKey: 'chat.models.geminiFlash' },
+      { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash', noteKey: 'chat.models.gemini15' },
+    ],
+  },
   {
     id: 'claude',
     name: 'Claude',
@@ -369,8 +451,11 @@ export function ModelPicker({ up = false }) {
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
   }, [open])
 
-  const eng = engines.find((e) => e.id === engine)
-  const model = eng.models.find((m) => m.id === models[engine]) ?? eng.models[0]
+  const eng = engines.find((e) => e.id === engine) || engines[0]
+  const model = eng?.models?.find((m) => m.id === models[engine]) ?? eng?.models?.[0] ?? { label: 'Default' }
+
+  const dotColor = (id) =>
+    id === 'free' ? 'bg-emerald-500' : id === 'gemini' ? 'bg-blue-500' : id === 'claude' ? 'bg-brand-500' : 'bg-emerald-600'
 
   return (
     <div ref={ref} className="relative">
@@ -381,7 +466,7 @@ export function ModelPicker({ up = false }) {
           open ? 'bg-violet-50 text-violet-700' : 'text-ink-500 hover:bg-ink-100 hover:text-ink-700'
         }`}
       >
-        <span className={`size-1.5 shrink-0 rounded-full ${engine === 'claude' ? 'bg-brand-500' : 'bg-emerald-500'}`} />
+        <span className={`size-1.5 shrink-0 rounded-full ${dotColor(engine)}`} />
         <span className="truncate">{eng.name} · {model.label}</span>
         <ChevronDown size={11} className={`shrink-0 text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -395,7 +480,7 @@ export function ModelPicker({ up = false }) {
           {engines.map((e) => (
             <div key={e.id} className="mb-1 last:mb-0">
               <p className="flex items-baseline gap-1.5 px-2 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-400">
-                <span className={`size-1.5 translate-y-[-1px] rounded-full ${e.id === 'claude' ? 'bg-brand-500' : 'bg-emerald-500'}`} />
+                <span className={`size-1.5 translate-y-[-1px] rounded-full ${dotColor(e.id)}`} />
                 {e.name} <span className="font-medium normal-case tracking-normal">{e.note}</span>
               </p>
               {e.models.map((m) => {

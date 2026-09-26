@@ -66,7 +66,14 @@ export default function ItineraryPanel() {
       onDragEnd={onDragEnd}
       onDragCancel={() => setActiveItem(null)}
     >
-      <div className="mx-auto flex max-w-2xl flex-col gap-4">
+      <div
+        role="region"
+        aria-label={t('itinerary.title', 'Itinerary')}
+        aria-live="polite"
+        aria-relevant="additions text"
+        aria-atomic="false"
+        className="mx-auto flex max-w-2xl flex-col gap-4"
+      >
         {building && <BuildingGlobe />}
         {days.map((day, i) => (
           <DayCard key={day.id} day={day} index={i} total={days.length} />

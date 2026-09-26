@@ -1,20 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { MapContainer, TileLayer, Polyline, CircleMarker } from 'react-leaflet'
 import {
-  Bot, X, Send, Square, RotateCcw, Wrench, TriangleAlert, Undo2, MapPin, Trash2,
-  Pencil, CalendarPlus, Search, Sparkles, ListChecks, Route, Settings2, Camera,
-  ChevronDown, Eye, EyeOff, Crosshair, History, Globe, Plus, Check, ChevronRight,
-  UtensilsCrossed, BedDouble, CalendarClock, Wallet, Gem, Luggage,
+  X, Send, Square, Wrench, TriangleAlert, Undo2, Trash2,
+  ChevronDown, Eye, EyeOff, Crosshair, History, Plus, Check, ChevronRight,
+  UtensilsCrossed, BedDouble, CalendarClock, Wallet, Gem, Luggage, Sparkles,
 } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useAgentChat, useChats } from '../agent/socket'
 import { useTrip, useUI, activeTrip } from '../store'
 import { useVisualViewport } from '../lib/useViewport'
 import Markdown from './Markdown'
-import PlanningStepper from './PlanningStepper'
 import QuestionCard, { QARecord, HotelPickRecord, RestaurantPickRecord } from './QuestionCard'
 import MentionInput from './MentionInput'
-import { TOOL_META, groupMessages, ToolChipGroup, SetupCard, ModelPicker, AgentAvatar } from './chatShared'
+import { TOOL_META, groupMessages, ToolChipGroup, ModelPicker, AgentAvatar } from './chatShared'
 
 /* conversation starters for the empty chat: built from the ACTUAL trip
    (real night localities, the fullest day) plus evergreen ones — never a
@@ -164,11 +162,12 @@ export default function ChatPanel({ onClose }) {
           </div>
         )}
 
-        <PlanningStepper />
-        {groupMessages(messages).map((m) => <Message key={m.id} m={m} />)}
+        <div aria-live="polite" aria-relevant="additions text" aria-atomic="false">
+          {groupMessages(messages).map((m) => <Message key={m.id} m={m} />)}
+        </div>
 
         {streamText && (
-          <div className="mb-3 max-w-[95%] text-[13px] leading-relaxed text-ink-800">
+          <div aria-live="polite" aria-atomic="false" className="mb-3 max-w-[95%] text-[13px] leading-relaxed text-ink-800">
             <Markdown text={streamText} />
             <span className="ml-0.5 inline-block h-3.5 w-[2px] animate-pulse rounded bg-brand-500 align-middle" />
           </div>
@@ -176,7 +175,7 @@ export default function ChatPanel({ onClose }) {
 
         <QuestionCard />
         {thinking && !streamText && !pendingQuestion && (
-          <div className="mt-2 flex items-center gap-2 text-xs font-semibold text-ink-400">
+          <div aria-live="polite" className="mt-2 flex items-center gap-2 text-xs font-semibold text-ink-400">
             <span className="flex gap-1">
               <Dot delay="0ms" /> <Dot delay="150ms" /> <Dot delay="300ms" />
             </span>
@@ -471,12 +470,46 @@ function Message({ m }) {
   if (m.role === 'qa') return <QARecord m={m} />
   if (m.role === 'hotelpick') return <HotelPickRecord m={m} />
   if (m.role === 'restpick') return <RestaurantPickRecord m={m} />
-  if (m.role === 'setup') return <SetupCard engine={m.engine} error={m.text} />
+  if (m.role === 'setup') {
+    return (
+      <div className="mb-3 rounded-2xl border border-emerald-200 bg-emerald-50/80 p-3.5 shadow-sm text-left">
+        <div className="flex items-center gap-2 text-[12.5px] font-bold text-emerald-900">
+          <Sparkles size={15} className="text-emerald-600" />
+          <span>Ulisse AI Planner</span>
+        </div>
+        <p className="mt-1 text-[11.5px] leading-relaxed text-emerald-800">
+          Ready to customize your trip in ₹ INR with zero logins, zero subscriptions, and zero API keys needed!
+        </p>
+        <button
+          onClick={() => {
+            useAgentChat.getState().select('free', 'smart-planner')
+            setTimeout(() => useAgentChat.getState().resendLast(), 100)
+          }}
+          className="mt-2.5 inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-1.5 text-[11.5px] font-bold text-white shadow-sm hover:bg-emerald-700 active:scale-95 transition"
+        >
+          ⚡ Plan Trip Now (Free & Instant)
+        </button>
+      </div>
+    )
+  }
   if (m.role === 'toolgroup') return <ToolChipGroup group={m} />
   return (
-    <div className="mb-3 flex items-start gap-2 rounded-xl bg-rose-50 px-3 py-2 text-[12px] leading-snug text-rose-700 ring-1 ring-rose-200">
-      <TriangleAlert size={13} className="mt-0.5 shrink-0" />
-      {m.text}
+    <div className="mb-3 rounded-xl bg-rose-50 p-3 text-[12px] leading-snug text-rose-700 ring-1 ring-rose-200">
+      <div className="flex items-start gap-2">
+        <TriangleAlert size={14} className="mt-0.5 shrink-0" />
+        <div className="flex-1">{m.text}</div>
+      </div>
+      {m.canUseFree && (
+        <button
+          onClick={() => {
+            useAgentChat.getState().select('free', 'smart-planner')
+            setTimeout(() => useAgentChat.getState().resendLast(), 100)
+          }}
+          className="mt-2.5 flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 active:scale-95 transition"
+        >
+          ⚡ Switch to Free AI Agent (No Login Required)
+        </button>
+      )}
     </div>
   )
 }

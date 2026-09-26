@@ -1,0 +1,145 @@
+import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
+import {
+  UtensilsCrossed, Star, TriangleAlert, Sparkles, MapPin, ExternalLink, Check,
+} from 'lucide-react'
+import { useAgentChat } from '../../agent/socket'
+import { useTrip, useUI, activeTrip } from '../../store'
+import { useDetourKm } from './questionUtils'
+import DetourChip from './DetourChip'
+
+export default function RestaurantPicker({ data, onChoose }) {
+  const { t } = useTranslation()
+  const trip = useTrip((s) => activeTrip(s))
+  const setPlacePreview = useUI((s) => s.setPlacePreview)
+  /* the preview pin must not outlive the picker (choice, cancel, new turn) */
+  useEffect(() => () => setPlacePreview(null), [setPlacePreview])
+  return (
+    <div className="anim-fade-up mb-3 overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-md shadow-violet-500/10">
+      <div className="flex items-center gap-2.5 border-b border-violet-100 bg-violet-50/60 px-3.5 py-2.5">
+        <UtensilsCrossed size={16} className="shrink-0 text-violet-600" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-violet-700">{t('restaurants.kicker')}</p>
+          <p className="truncate text-[12.5px] font-bold leading-tight text-ink-900">
+            {data.location}
+            {data.meal && <span className="font-semibold text-ink-400"> · {t(`restaurants.meal.${data.meal}`)}</span>}
+            {data.dayNumber && <span className="font-semibold text-ink-400"> · {t('common.dayN', { n: data.dayNumber })}</span>}
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-col gap-1.5 p-3">
+        {data.options.map((o) => (
+          <RestaurantOption key={o.name} o={o} trip={trip} onPick={() => onChoose(o.name)} />
+        ))}
+        <button
+          onClick={() => onChoose(null)}
+          className="mt-0.5 rounded-xl border border-dashed border-ink-300 px-3 py-2 text-[12px] font-bold text-ink-500 transition hover:border-ink-400 hover:bg-ink-50 hover:text-ink-700"
+        >
+          {t('restaurants.none')}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function StarsBadge({ rating, count, lowReviews }) {
+  const { t, i18n } = useTranslation()
+  if (rating == null) return null
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 ring-1 ring-amber-200">
+      <Star size={10.5} className="fill-amber-400 text-amber-400" />
+      <span className="text-[11px] font-bold leading-none text-ink-800">
+        {rating.toLocaleString(i18n.language, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+      </span>
+      {count != null && (
+        <span className={`inline-flex items-center gap-0.5 text-[10.5px] font-semibold leading-none ${lowReviews ? 'text-amber-600' : 'text-ink-500'}`}>
+          {lowReviews && <TriangleAlert size={9.5} />}
+          ({t('restaurants.reviews', { count, n: count.toLocaleString(i18n.language) })})
+        </span>
+      )}
+    </span>
+  )
+}
+
+function RestaurantOption({ o, trip, onPick }) {
+  const { t } = useTranslation()
+  const setPlacePreview = useUI((s) => s.setPlacePreview)
+  const hasCoords = o.lat != null && o.lng != null
+  const detourKm = useDetourKm(trip, o.lat, o.lng)
+
+  const showOnMap = (e) => {
+    e.stopPropagation()
+    setPlacePreview({
+      kind: 'restaurant', lat: o.lat, lng: o.lng, name: o.name,
+      rating: o.rating, review_count: o.review_count, price_range: o.price_range, url: o.url,
+    })
+    /* the mobile chat is a fullscreen overlay: step aside to show the map */
+    if (window.innerWidth < 1024) {
+      useAgentChat.getState().setOpen(false)
+      useUI.getState().revealMap()
+    }
+  }
+
+  const lowReviews = o.review_count != null && o.review_count < 50
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label={`${o.name}${o.price_range ? ` (${o.price_range})` : ''}`}
+      onClick={onPick}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick() } }}
+      className={`group flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 transition hover:shadow-sm ${
+        o.recommended ? 'border-violet-300 bg-violet-50/40 hover:border-violet-400 hover:bg-violet-50' : 'border-ink-200 hover:border-violet-400 hover:bg-violet-50/50'
+      }`}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+          <span className="text-[13px] font-bold leading-tight text-ink-900">{o.name}</span>
+          {o.recommended && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-violet-600 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-white">
+              <Sparkles size={9} /> {t('hotels.recommended')}
+            </span>
+          )}
+        </div>
+        {o.category && <p className="mt-0.5 text-[11px] font-semibold leading-snug text-ink-400">{o.category}</p>}
+        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+          <StarsBadge rating={o.rating} count={o.review_count} lowReviews={lowReviews} />
+          <DetourChip km={detourKm} />
+          {hasCoords && (
+            <button
+              onClick={showOnMap}
+              title={t('hotels.map')}
+              className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-[10.5px] font-bold text-violet-600 transition hover:bg-violet-100"
+            >
+              <MapPin size={10} /> {t('hotels.map')}
+            </button>
+          )}
+          {o.url && (
+            <a
+              href={o.url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              title={t('restaurants.openMaps')}
+              className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-[10.5px] font-bold text-violet-600 transition hover:bg-violet-100"
+            >
+              Google Maps <ExternalLink size={10} />
+            </a>
+          )}
+        </div>
+        {o.note && <p className="mt-1 text-[11px] leading-snug text-ink-400">{o.note}</p>}
+      </div>
+      <div className="flex shrink-0 flex-col items-end">
+        {o.price_range && (
+          <>
+            <span className="text-[15px] font-extrabold leading-tight text-ink-900">{o.price_range}</span>
+            <span className="text-[10.5px] font-bold text-ink-400">{t('restaurants.perPerson')}</span>
+          </>
+        )}
+        <span className="mt-1 hidden items-center gap-1 rounded-lg bg-violet-600 px-2 py-1 text-[10.5px] font-bold text-white group-hover:inline-flex">
+          <Check size={10} strokeWidth={3.5} /> {t('hotels.pick')}
+        </span>
+      </div>
+    </div>
+  )
+}

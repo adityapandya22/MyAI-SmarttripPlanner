@@ -39,8 +39,12 @@ export default function DayCard({ day, index, total }) {
     >
       {/* header */}
       <header
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="flex cursor-pointer select-none items-center gap-3 border-l-4 px-3 py-3 sm:px-4"
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen((o) => !o) } }}
+        className="flex cursor-pointer select-none items-center gap-3 border-l-4 px-3 py-3 outline-none focus-visible:ring-2 focus-visible:ring-violet-400 sm:px-4"
         style={{ borderLeftColor: day.color }}
       >
         <div

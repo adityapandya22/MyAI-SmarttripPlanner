@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Palmtree, Plus, Copy, Trash2, Upload, MapPin, CalendarDays, CarFront, ChevronRight, Route, Wallet,
+  ShieldCheck, Sparkles,
 } from 'lucide-react'
 import { useTrip, useUI, toast } from '../store'
 import { tripStats, fmtDur, dayDate, fmtDate, fmtKm, fmtMoney, costByType, fuelCost } from '../lib/utils'
@@ -12,6 +13,9 @@ import ConfirmDialog from './ConfirmDialog'
 import Toast from './Toast'
 import LanguageSwitcher from './LanguageSwitcher'
 import { StorageSetupCard, StorageSettingsRow } from './StorageCard'
+import IndiaStatesModal from './IndiaStatesModal'
+import AdminModal from './AdminModal'
+import { useAgentChat } from '../agent/socket'
 
 export default function Dashboard() {
   const { t } = useTranslation()
@@ -25,6 +29,19 @@ export default function Dashboard() {
   const fileRef = useRef(null)
   const [creating, setCreating] = useState(false)
   const [newTitle, setNewTitle] = useState('')
+  const [showIndiaModal, setShowIndiaModal] = useState(false)
+  const [showAdminModal, setShowAdminModal] = useState(false)
+  const [consumerPrompt, setConsumerPrompt] = useState('')
+
+  const handleConsumerQuickPlan = (prompt) => {
+    const query = (prompt || consumerPrompt).trim()
+    if (!query) return
+    const title = query.length > 35 ? query.slice(0, 35) + '…' : query
+    createTrip(title, 'interview')
+    setTimeout(() => {
+      useAgentChat.getState().send(query)
+    }, 400)
+  }
 
   /* the primary path: a new trip is born as a conversation with the agent */
   const onCreateWithAgent = () => {
@@ -69,7 +86,28 @@ export default function Dashboard() {
             <h1 className="font-display text-xl font-extrabold text-ink-900">{t('dashboard.title')}</h1>
             <p className="text-xs text-ink-500">{t('dashboard.subtitle')}</p>
           </div>
-          <div className="ml-auto flex gap-2">
+          <div className="ml-auto flex items-center gap-2">
+            <div className="hidden md:flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800">
+              <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Consumer Mode</span>
+            </div>
+            <button
+              onClick={() => setShowAdminModal(true)}
+              className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2 text-sm font-bold text-indigo-700 shadow-sm transition hover:border-indigo-300 hover:bg-indigo-100 active:scale-[.97]"
+              title="Open Administrative Control Center (Configure Backend API Keys & AI Engine)"
+            >
+              <ShieldCheck size={16} className="text-indigo-600" />
+              <span className="hidden sm:inline">Admin Portal</span>
+            </button>
+            <button
+              onClick={() => setShowIndiaModal(true)}
+              className="flex items-center gap-1.5 rounded-xl border border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50 px-3 py-2 text-sm font-bold text-orange-800 shadow-sm transition hover:border-orange-300 hover:from-orange-100 hover:to-amber-100 active:scale-[.97]"
+              title="Explore all 28 States and 8 Union Territories of India in ₹ INR"
+            >
+              <span className="text-base leading-none">🇮🇳</span>
+              <span className="hidden sm:inline">Explore India</span>
+              <span className="rounded-full bg-orange-200/80 px-1.5 py-0.2 text-[10px] font-black text-orange-950">36</span>
+            </button>
             <LanguageSwitcher />
             <button
               onClick={() => fileRef.current?.click()}
@@ -89,7 +127,92 @@ export default function Dashboard() {
       </header>
 
       <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+        {/* Consumer Instant Trip Generator Hero Banner */}
+        <div className="mb-6 overflow-hidden rounded-3xl border border-violet-200 bg-gradient-to-br from-violet-600 via-indigo-600 to-brand-600 p-6 text-white shadow-xl shadow-indigo-600/15">
+          <div className="max-w-2xl">
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-bold tracking-wide text-white backdrop-blur-md">
+              <Sparkles size={14} className="text-amber-300" />
+              <span>Instant AI Trip Planner · Zero Login · No API Key Needed</span>
+            </div>
+            <h2 className="mt-3 font-display text-2xl font-black tracking-tight text-white sm:text-3xl">
+              Where would you like to travel?
+            </h2>
+            <p className="mt-1.5 text-xs text-violet-100 sm:text-sm leading-relaxed">
+              Type your dream destination or travel style. Ulisse automatically creates the full day-by-day itinerary, suggests verified hotels, and budgets everything in ₹ Rupees.
+            </p>
+
+            <form
+              onSubmit={(e) => { e.preventDefault(); handleConsumerQuickPlan() }}
+              className="mt-4 flex flex-col gap-2 rounded-2xl bg-white p-1.5 shadow-2xl sm:flex-row sm:items-center"
+            >
+              <input
+                type="text"
+                value={consumerPrompt}
+                onChange={(e) => setConsumerPrompt(e.target.value)}
+                placeholder="e.g. Plan a 5-day road trip across Rajasthan with heritage stays and palaces in ₹ INR..."
+                className="w-full min-w-0 flex-1 bg-transparent px-4 py-2.5 text-sm font-medium text-ink-900 outline-none placeholder:text-ink-400"
+              />
+              <button
+                type="submit"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-violet-600/30 transition hover:bg-violet-700 active:scale-95 sm:w-auto"
+              >
+                <Sparkles size={16} />
+                <span>Generate Itinerary</span>
+              </button>
+            </form>
+
+            <div className="mt-3.5 flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-semibold text-violet-200">Instant trip ideas:</span>
+              {[
+                '🏰 5 Days in Rajasthan',
+                '🌴 Kerala Backwaters Tour',
+                '🏖️ 4 Days in Goa with Beach Stays',
+                '🏔️ Himachal Road Trip to Shimla',
+                '🌸 Kashmir Paradise Tour',
+                '🏛️ Varanasi Spiritual Heritage',
+              ].map((idea) => (
+                <button
+                  key={idea}
+                  type="button"
+                  onClick={() => handleConsumerQuickPlan(idea.replace(/^[^\s]+\s/, ''))}
+                  className="rounded-lg bg-white/15 px-2.5 py-1 text-xs font-medium text-white backdrop-blur-sm transition hover:bg-white/25 active:scale-95"
+                >
+                  {idea}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
         <StorageSetupCard />
+
+        {/* Explore India Discovery Banner */}
+        <div className="mb-5 flex flex-col sm:flex-row items-center justify-between gap-4 rounded-2xl border border-orange-200/90 bg-gradient-to-r from-orange-500/10 via-amber-500/10 to-emerald-500/10 p-4 sm:p-5 shadow-sm">
+          <div className="flex items-center gap-3.5">
+            <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-orange-500 to-amber-500 text-2xl shadow-md shadow-orange-500/25">
+              🇮🇳
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-display text-base font-extrabold text-ink-900">
+                  Plan Trips Across India in Rupees (₹)
+                </h3>
+                <span className="rounded-md bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-800 border border-orange-200">
+                  28 States + 8 UTs
+                </span>
+              </div>
+              <p className="text-xs text-ink-600 mt-0.5">
+                From Himalayan peaks in Himachal to Kerala backwaters and Rajasthan palaces — explore all 36 Indian destinations with Ulisse.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowIndiaModal(true)}
+            className="flex shrink-0 items-center gap-1.5 rounded-xl bg-orange-600 px-4 py-2 text-xs sm:text-sm font-bold text-white shadow-md shadow-orange-600/30 transition hover:bg-orange-700 active:scale-[.97]"
+          >
+            Explore India States →
+          </button>
+        </div>
         {creating && (
           <div className="anim-fade-up mb-5 flex flex-wrap items-center gap-2 rounded-2xl border border-brand-200 bg-white p-4 shadow-sm">
             <input
@@ -150,6 +273,8 @@ export default function Dashboard() {
 
       <ConfirmDialog />
       <Toast />
+      {showIndiaModal && <IndiaStatesModal onClose={() => setShowIndiaModal(false)} />}
+      <AdminModal open={showAdminModal} onClose={() => setShowAdminModal(false)} />
     </div>
   )
 }

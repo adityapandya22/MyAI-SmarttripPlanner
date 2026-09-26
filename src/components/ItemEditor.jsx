@@ -32,8 +32,8 @@ export default function ItemEditor() {
   const updateItem = useTrip((s) => s.updateItem)
   const removeItem = useTrip((s) => s.removeItem)
   const days = useTrip((s) => activeTrip(s).days)
-  const currency = useTrip((s) => activeTrip(s).currency ?? 'USD')
-  const cur = currency === 'EUR' ? '€' : '$'
+  const currency = useTrip((s) => activeTrip(s).currency ?? 'INR')
+  const cur = currency === 'INR' ? '₹' : currency === 'EUR' ? '€' : '$'
 
   const { dayId, itemId, draft: savedDraft } = editor
   const existing = itemId ? days.find((d) => d.id === dayId)?.items.find((i) => i.id === itemId) : null

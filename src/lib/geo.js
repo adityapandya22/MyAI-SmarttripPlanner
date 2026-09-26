@@ -19,14 +19,22 @@ export function haversineKm([lat1, lng1], [lat2, lng2]) {
  */
 export function bestInsertion(trip, point) {
   const chain = [] // { dayId, itemIndex, coord }
-  trip.days.forEach((day) => {
+  const days = Array.isArray(trip?.days) ? trip.days : []
+  days.forEach((day) => {
+    if (!day || !Array.isArray(day.items)) return
     day.items.forEach((it, itemIndex) => {
-      if (it.lat != null) chain.push({ dayId: day.id, itemIndex, coord: [it.lat, it.lng] })
+      if (it && it.lat != null && it.lng != null) {
+        chain.push({ dayId: day.id, itemIndex, coord: [it.lat, it.lng] })
+      }
     })
   })
   if (!chain.length) {
-    const day = trip.days[0]
-    return day ? { dayId: day.id, index: day.items.length, addedKm: 0 } : null
+    const day = days[0]
+    return day ? { dayId: day.id, index: Array.isArray(day.items) ? day.items.length : 0, addedKm: 0 } : null
+  }
+  if (!point || point.lat == null || point.lng == null) {
+    const day = days[0]
+    return day ? { dayId: day.id, index: Array.isArray(day.items) ? day.items.length : 0, addedKm: 0 } : null
   }
 
   const p = [point.lat, point.lng]
@@ -53,7 +61,7 @@ export function bestInsertion(trip, point) {
     { node: chain[chain.length - 1], index: chain[chain.length - 1].itemIndex + 1, addedKm: haversineKm(chain[chain.length - 1].coord, p) * 2 },
   ]
   for (const e of endpoints) {
-    if (!best || e.addedKm < best.addedKm) best = { dayId: e.node.dayId, index: e.index, addedKm: e.addedKm }
+    if (!best || e.addedKm <= best.addedKm) best = { dayId: e.node.dayId, index: e.index, addedKm: e.addedKm }
   }
   return { ...best, addedKm: Math.round(best.addedKm) }
 }

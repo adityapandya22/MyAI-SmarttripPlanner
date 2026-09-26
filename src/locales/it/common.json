@@ -76,6 +76,7 @@
     "suggestion": "consiglio"
   },
   "gas": {
+    "inr_l": "₹ / litro",
     "usd_gal": "$ / gallone",
     "usd_l": "$ / litro",
     "eur_l": "€ / litro"
@@ -227,6 +228,11 @@
       "preferTerminal": "Preferisci il terminale?"
     },
     "models": {
+      "freeNote": "100% Gratuito · Nessun Accesso Richiesto",
+      "smartPlanner": "Planner AI autonomo (zero login)",
+      "geminiNote": "Chiave gratuita Google AI Studio",
+      "geminiFlash": "AI gratuita veloce e intelligente",
+      "gemini15": "Finestra di contesto ampia",
       "claudeNote": "abbonamento Pro/Max",
       "codexNote": "abbonamento Plus (Codex)",
       "sonnet": "veloce e brillante — consigliato",
@@ -612,6 +618,7 @@
     "placeholder": "Descrivi il viaggio che sogni…",
     "stop": "Interrompi",
     "send": "Invia",
+    "currencyINR": "₹ Rupia",
     "currencyEUR": "€ Euro",
     "currencyUSD": "$ Dollaro",
     "footerHint": "L'itinerario si crea solo conversando con Ulisse",

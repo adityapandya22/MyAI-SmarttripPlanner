@@ -20,6 +20,7 @@ import DayEditor from './components/DayEditor'
 import Dashboard from './components/Dashboard'
 import ConfirmDialog from './components/ConfirmDialog'
 import Toast from './components/Toast'
+import ErrorBoundary from './components/ErrorBoundary'
 
 const isMobileNow = () => window.innerWidth < 1024
 
@@ -98,7 +99,7 @@ export default function App() {
     useAgentChat.setState({ panelW: isDesktop && chatOpen ? chatW : 0 })
   }, [chatOpen, chatW, isDesktop])
 
-  /* global Escape: picking, then mobile chat, then modals, then the sheet */
+  /* Global Escape: picking, then mobile chat, then modals, then the sheet */
   useEffect(() => {
     const onKey = (e) => {
       if (e.key !== 'Escape') return
@@ -117,122 +118,134 @@ export default function App() {
 
   const leftTab = ['checklist', 'suggestions'].includes(tab) ? tab : 'itinerary'
 
-  if (!activeId) return <Dashboard />
+  if (!activeId) return <ErrorBoundary section="Dashboard"><Dashboard /></ErrorBoundary>
 
   /* a newborn trip exists only as a conversation until the agent opens the planner */
-  if (phase === 'interview') return <InterviewView />
+  if (phase === 'interview') return <ErrorBoundary section="Interview"><InterviewView /></ErrorBoundary>
 
   return (
-    <div className="flex h-full flex-col">
-      <div ref={hdrRef}><Header /></div>
+    <ErrorBoundary section="App">
+      <div className="flex h-full flex-col">
+        <div ref={hdrRef}><Header /></div>
 
-      <main className="relative z-10 flex min-h-0 flex-1 lg:pointer-events-none" style={{ '--left-w': `${leftW + 12}px` }}>
-        {/* map — always mounted, full-viewport background on every size */}
-        <section className="pointer-events-auto fixed inset-0 z-0">
-          <MapPanel />
-        </section>
-
-        {/* left panel — floating resizable card (desktop only) */}
-        {isDesktop && (
-          <section className="relative z-[540] hidden min-w-0 flex-1 lg:pointer-events-auto lg:absolute lg:bottom-3 lg:left-3 lg:top-3 lg:flex lg:w-[calc(var(--left-w)-12px)] lg:flex-none lg:overflow-hidden lg:rounded-3xl lg:border lg:border-ink-200 lg:shadow-2xl flex-col bg-ink-50">
-            {/* desktop tabs */}
-            <nav className="hidden items-center gap-1 border-b border-ink-200 bg-white px-4 pt-2 lg:flex">
-              <TabBtn active={leftTab === 'itinerary'} onClick={() => setTab('itinerary')} Icon={CalendarRange} label={t('app.tabItinerary')} />
-              <TabBtn active={leftTab === 'suggestions'} onClick={() => setTab('suggestions')} Icon={Sparkles} label={t('app.tabSuggestions')} />
-              <TabBtn active={leftTab === 'checklist'} onClick={() => setTab('checklist')} Icon={ListChecks} label={t('app.tabChecklist')} />
-            </nav>
-
-            <div className="nice-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-8 pt-4 sm:px-4">
-              {leftTab === 'itinerary' && <ItineraryPanel />}
-              {leftTab === 'suggestions' && <Suggestions />}
-              {leftTab === 'checklist' && <Checklist />}
-            </div>
-
-            {/* drag handle to resize the itinerary column */}
-            <div
-              onMouseDown={startLeftDrag}
-              title={t('app.dragResize')}
-              className="absolute right-0 top-0 z-10 hidden h-full w-1.5 cursor-col-resize transition-colors hover:bg-brand-400/60 active:bg-brand-500 lg:block"
-            />
+        <main className="relative z-10 flex min-h-0 flex-1 lg:pointer-events-none" style={{ '--left-w': `${leftW + 12}px` }}>
+          {/* map — always mounted, full-viewport background on every size */}
+          <section className="pointer-events-auto fixed inset-0 z-0">
+            <ErrorBoundary section="Map">
+              <MapPanel />
+            </ErrorBoundary>
           </section>
-        )}
 
-        {/* mobile: the same panes live in a draggable bottom sheet; the
-            Ulisse button rides its top edge */}
-        {!isDesktop && (
-          <BottomSheet
-            snap={sheet}
-            onSnapChange={setSheet}
-            header={<SheetHeader />}
-            accessory={
-              !chatOpen && (
-                <button
-                  onClick={() => setChatOpen(true)}
-                  aria-label={t('header.aiAssistant')}
-                  className={`grid size-14 place-items-center rounded-full bg-violet-600 text-white shadow-xl shadow-violet-600/40 transition-all duration-300 active:scale-95 ${
-                    sheet === 'full' ? 'pointer-events-none scale-50 opacity-0' : ''
-                  }`}
-                >
-                  <Bot size={24} />
-                  {(thinking || pendingQuestion) && (
-                    <span className="absolute right-1 top-1 flex size-3.5">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
-                      <span className="relative inline-flex size-3.5 rounded-full border-2 border-white bg-amber-400" />
-                    </span>
-                  )}
-                </button>
-              )
-            }
-          >
-            {leftTab === 'itinerary' && <ItineraryPanel />}
-            {leftTab === 'suggestions' && <Suggestions />}
-            {leftTab === 'checklist' && <Checklist />}
-          </BottomSheet>
-        )}
-        {/* AI chat — desktop floating panel over the map (resizable) */}
-        {isDesktop && chatOpen && (
-          <div
-            style={{ width: chatW }}
-            className="anim-fade-up absolute bottom-3 right-3 top-3 z-[560] hidden lg:pointer-events-auto lg:block"
-          >
-            <div className="relative h-full overflow-hidden rounded-3xl border border-ink-200 bg-white shadow-2xl">
+          {/* left panel — floating resizable card (desktop only) */}
+          {isDesktop && (
+            <section className="relative z-[540] hidden min-w-0 flex-1 lg:pointer-events-auto lg:absolute lg:bottom-3 lg:left-3 lg:top-3 lg:flex lg:w-[calc(var(--left-w)-12px)] lg:flex-none lg:overflow-hidden lg:rounded-3xl lg:border lg:border-ink-200 lg:shadow-2xl flex-col bg-ink-50">
+              {/* desktop tabs */}
+              <nav className="hidden items-center gap-1 border-b border-ink-200 bg-white px-4 pt-2 lg:flex">
+                <TabBtn active={leftTab === 'itinerary'} onClick={() => setTab('itinerary')} Icon={CalendarRange} label={t('app.tabItinerary')} />
+                <TabBtn active={leftTab === 'suggestions'} onClick={() => setTab('suggestions')} Icon={Sparkles} label={t('app.tabSuggestions')} />
+                <TabBtn active={leftTab === 'checklist'} onClick={() => setTab('checklist')} Icon={ListChecks} label={t('app.tabChecklist')} />
+              </nav>
+
+              <div className="nice-scroll min-h-0 flex-1 overflow-y-auto px-3 pb-8 pt-4 sm:px-4">
+                <ErrorBoundary section="Itinerary">
+                  {leftTab === 'itinerary' && <ItineraryPanel />}
+                  {leftTab === 'suggestions' && <Suggestions />}
+                  {leftTab === 'checklist' && <Checklist />}
+                </ErrorBoundary>
+              </div>
+
+              {/* drag handle to resize the itinerary column */}
               <div
-                onMouseDown={startChatDrag}
+                onMouseDown={startLeftDrag}
                 title={t('app.dragResize')}
-                className="absolute left-0 top-0 z-10 h-full w-1.5 cursor-col-resize transition-colors hover:bg-brand-400/60 active:bg-brand-500"
+                className="absolute right-0 top-0 z-10 hidden h-full w-1.5 cursor-col-resize transition-colors hover:bg-brand-400/60 active:bg-brand-500 lg:block"
               />
+            </section>
+          )}
+
+          {/* mobile: the same panes live in a draggable bottom sheet; the
+              Ulisse button rides its top edge */}
+          {!isDesktop && (
+            <BottomSheet
+              snap={sheet}
+              onSnapChange={setSheet}
+              header={<SheetHeader />}
+              accessory={
+                !chatOpen && (
+                  <button
+                    onClick={() => setChatOpen(true)}
+                    aria-label={t('header.aiAssistant')}
+                    className={`grid size-14 place-items-center rounded-full bg-violet-600 text-white shadow-xl shadow-violet-600/40 transition-all duration-300 active:scale-95 ${
+                      sheet === 'full' ? 'pointer-events-none scale-50 opacity-0' : ''
+                    }`}
+                  >
+                    <Bot size={24} />
+                    {(thinking || pendingQuestion) && (
+                      <span className="absolute right-1 top-1 flex size-3.5">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+                        <span className="relative inline-flex size-3.5 rounded-full border-2 border-white bg-amber-400" />
+                      </span>
+                    )}
+                  </button>
+                )
+              }
+            >
+              <ErrorBoundary section="Itinerary">
+                {leftTab === 'itinerary' && <ItineraryPanel />}
+                {leftTab === 'suggestions' && <Suggestions />}
+                {leftTab === 'checklist' && <Checklist />}
+              </ErrorBoundary>
+            </BottomSheet>
+          )}
+          {/* AI chat — desktop floating panel over the map (resizable) */}
+          {isDesktop && chatOpen && (
+            <div
+              style={{ width: chatW }}
+              className="anim-fade-up absolute bottom-3 right-3 top-3 z-[560] hidden lg:pointer-events-auto lg:block"
+            >
+              <div className="relative h-full overflow-hidden rounded-3xl border border-ink-200 bg-white shadow-2xl">
+                <div
+                  onMouseDown={startChatDrag}
+                  title={t('app.dragResize')}
+                  className="absolute left-0 top-0 z-10 h-full w-1.5 cursor-col-resize transition-colors hover:bg-brand-400/60 active:bg-brand-500"
+                />
+                <ErrorBoundary section="Chat">
+                  <ChatPanel onClose={() => setChatOpen(false)} />
+                </ErrorBoundary>
+              </div>
+            </div>
+          )}
+        </main>
+
+        {/* overlays */}
+        {/* mobile chat: fullscreen, above the header (outside main's stacking context) */}
+        {!isDesktop && chatOpen && (
+          <div className="anim-fade-up fixed inset-x-0 top-0 z-[850] bg-white" style={{ height: vv.height }}>
+            <ErrorBoundary section="Chat">
               <ChatPanel onClose={() => setChatOpen(false)} />
+            </ErrorBoundary>
+          </div>
+        )}
+        {detail && <ItemDetail key={`${detail.dayId}:${detail.itemId}`} />}
+        {editor && !picking && <ItemEditor key={`${editor.dayId}:${editor.itemId ?? 'new'}`} />}
+        {dayEditor && <DayEditor key={dayEditor.dayId ?? 'new'} />}
+        {picking && (
+          <div className="pointer-events-none fixed inset-x-0 top-[calc(var(--hdr-b,96px)+8px)] z-[800] flex justify-center px-4">
+            <div className="anim-fade-up pointer-events-auto flex items-center gap-3 rounded-2xl bg-ink-900 px-5 py-3 text-sm font-semibold text-white shadow-xl">
+              {t('app.pickOnMap')}
+              <button
+                onClick={() => setPicking(false)}
+                className="rounded-lg bg-white/15 px-2.5 py-1 text-xs font-bold hover:bg-white/25"
+              >
+                {t('common.cancel')}
+              </button>
             </div>
           </div>
         )}
-      </main>
-
-      {/* overlays */}
-      {/* mobile chat: fullscreen, above the header (outside main's stacking context) */}
-      {!isDesktop && chatOpen && (
-        <div className="anim-fade-up fixed inset-x-0 top-0 z-[850] bg-white" style={{ height: vv.height }}>
-          <ChatPanel onClose={() => setChatOpen(false)} />
-        </div>
-      )}
-      {detail && <ItemDetail key={`${detail.dayId}:${detail.itemId}`} />}
-      {editor && !picking && <ItemEditor key={`${editor.dayId}:${editor.itemId ?? 'new'}`} />}
-      {dayEditor && <DayEditor key={dayEditor.dayId ?? 'new'} />}
-      {picking && (
-        <div className="pointer-events-none fixed inset-x-0 top-[calc(var(--hdr-b,96px)+8px)] z-[800] flex justify-center px-4">
-          <div className="anim-fade-up pointer-events-auto flex items-center gap-3 rounded-2xl bg-ink-900 px-5 py-3 text-sm font-semibold text-white shadow-xl">
-            {t('app.pickOnMap')}
-            <button
-              onClick={() => setPicking(false)}
-              className="rounded-lg bg-white/15 px-2.5 py-1 text-xs font-bold hover:bg-white/25"
-            >
-              {t('common.cancel')}
-            </button>
-          </div>
-        </div>
-      )}
-      <ConfirmDialog />
-      <Toast />
-    </div>
+        <ConfirmDialog />
+        <Toast />
+      </div>
+    </ErrorBoundary>
   )
 }
 
