@@ -13,6 +13,7 @@ import PinMarker from './map/PinMarker'
 import PlacePreviewMarker from './map/PlacePreviewMarker'
 import SearchOverlay from './map/SearchOverlay'
 import LegChip from './map/LegChip'
+import { MAP_TILE_URL, MAP_TILE_ATTRIBUTION, MAP_TILE_MAX_ZOOM } from '../lib/mapTiles'
 import {
   MapAutosize,
   MapRef,
@@ -74,10 +75,9 @@ export default function MapPanel() {
         className="h-full w-full"
       >
         <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          subdomains="abcd"
-          maxZoom={19}
+          url={MAP_TILE_URL}
+          attribution={MAP_TILE_ATTRIBUTION}
+          maxZoom={MAP_TILE_MAX_ZOOM}
         />
         <MapAutosize />
         <MapRef mapRef={mapRef} />

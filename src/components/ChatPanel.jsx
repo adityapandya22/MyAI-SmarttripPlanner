@@ -9,6 +9,7 @@ import { Trans, useTranslation } from 'react-i18next'
 import { useAgentChat, useChats } from '../agent/socket'
 import { useTrip, useUI, activeTrip } from '../store'
 import { useVisualViewport } from '../lib/useViewport'
+import { MAP_TILE_URL } from '../lib/mapTiles'
 import Markdown from './Markdown'
 import QuestionCard, { QARecord, HotelPickRecord, RestaurantPickRecord } from './QuestionCard'
 import MentionInput from './MentionInput'
@@ -431,7 +432,7 @@ function MiniMap({ dayNumber, highlight }) {
         keyboard={false}
         className="h-full w-full"
       >
-        <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" subdomains="abcd" />
+        <TileLayer url={MAP_TILE_URL} />
         {coords.length > 1 && (
           <Polyline positions={coords} pathOptions={{ color: day?.color ?? '#f59e0b', weight: 3, opacity: 0.75 }} />
         )}
