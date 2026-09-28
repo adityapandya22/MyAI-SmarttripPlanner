@@ -110,6 +110,69 @@ describe('runFreeAgent interview flow', () => {
     expect(restTool).toBeTruthy()
     expect(restTool.args.location).toBe('Jaipur')
   })
+
+  it('asks "Which destination did you mean?" when destination is unknown in interview mode', async () => {
+    const broadcastEvents = []
+    const mockBridge = {
+      broadcast: (ev) => {
+        broadcastEvents.push(ev)
+      },
+      callBrowser: async () => ({ ok: true, result: {} }),
+    }
+
+    await runFreeAgent('Plan a trip somewhere sunny for 5 days', {
+      mode: 'interview',
+      bridge: mockBridge,
+      abortSignal: new AbortController().signal,
+    })
+
+    const textEvent = broadcastEvents.find((e) => e.type === 'assistant_text')
+    expect(textEvent).toBeTruthy()
+    expect(textEvent.text).toContain('Which destination did you mean?')
+  })
+
+  it('asks "Which destination did you mean?" when hotel search has no destination in planner mode', async () => {
+    const broadcastEvents = []
+    const mockBridge = {
+      broadcast: (ev) => {
+        broadcastEvents.push(ev)
+      },
+      callBrowser: async () => ({ ok: true, result: {} }),
+    }
+
+    await runFreeAgent('Find me a luxury hotel', {
+      mode: 'planner',
+      bridge: mockBridge,
+      abortSignal: new AbortController().signal,
+    })
+
+    const textEvent = broadcastEvents.find((e) => e.type === 'assistant_text')
+    expect(textEvent).toBeTruthy()
+    expect(textEvent.text).toContain('Which destination did you mean?')
+  })
+
+  it('derives hotel checkin and checkout from startDate', async () => {
+    const calledTools = []
+    const mockBridge = {
+      broadcast: () => {},
+      callBrowser: async (name, args) => {
+        calledTools.push({ name, args })
+        return { ok: true, result: {} }
+      },
+    }
+
+    await runFreeAgent('Book hotels in Goa', {
+      mode: 'planner',
+      startDate: '2026-12-10',
+      bridge: mockBridge,
+      abortSignal: new AbortController().signal,
+    })
+
+    const hotelTool = calledTools.find((c) => c.name === 'search_hotels')
+    expect(hotelTool).toBeTruthy()
+    expect(hotelTool.args.checkin).toBe('2026-12-10')
+    expect(hotelTool.args.checkout).toBe('2026-12-11')
+  })
 })
 
 describe('parseDaysFromText', () => {

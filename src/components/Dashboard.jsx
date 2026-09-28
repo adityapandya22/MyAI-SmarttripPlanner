@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Palmtree, Plus, Copy, Trash2, Upload, MapPin, CalendarDays, CarFront, ChevronRight, Route, Wallet,
@@ -16,6 +16,8 @@ import { StorageSetupCard, StorageSettingsRow } from './StorageCard'
 import IndiaStatesModal from './IndiaStatesModal'
 import AdminModal from './AdminModal'
 import { useAgentChat } from '../agent/socket'
+import { INDIA_STATES } from '../data/indiaStates'
+import { buildDestinationTrie } from '../lib/trie'
 
 export default function Dashboard() {
   const { t } = useTranslation()
@@ -32,6 +34,16 @@ export default function Dashboard() {
   const [showIndiaModal, setShowIndiaModal] = useState(false)
   const [showAdminModal, setShowAdminModal] = useState(false)
   const [consumerPrompt, setConsumerPrompt] = useState('')
+
+  const destTrie = useMemo(() => buildDestinationTrie(INDIA_STATES), [])
+
+  const promptSuggestions = useMemo(() => {
+    const q = consumerPrompt.trim().toLowerCase()
+    if (!q || q.length < 2) return []
+    const words = q.split(/\s+/)
+    const lastWord = words[words.length - 1]
+    return lastWord.length >= 2 ? destTrie.autocomplete(lastWord, 5) : destTrie.autocomplete(q, 5)
+  }, [consumerPrompt, destTrie])
 
   const handleConsumerQuickPlan = (prompt) => {
     const query = (prompt || consumerPrompt).trim()
@@ -160,6 +172,32 @@ export default function Dashboard() {
                 <span>Generate Itinerary</span>
               </button>
             </form>
+
+            {/* Trie Destination Autocomplete Suggestions */}
+            {promptSuggestions.length > 0 && (
+              <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-xs anim-fade-in">
+                <span className="text-violet-200 text-[11px] font-semibold flex items-center gap-1">
+                  <Sparkles size={12} className="text-amber-300" /> Autocomplete:
+                </span>
+                {promptSuggestions.map((sug, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => {
+                      const st = INDIA_STATES.find((s) => s.id === sug.meta?.stateId)
+                      const fillText = st?.promptTemplate || `Plan a trip to ${sug.term} with hotels and dining in ₹ INR`
+                      setConsumerPrompt(fillText)
+                    }}
+                    className="rounded-lg bg-white/20 hover:bg-white/30 px-2.5 py-0.5 text-[11px] font-medium text-white transition backdrop-blur-md border border-white/20 capitalize"
+                  >
+                    {sug.term}
+                    {sug.meta?.stateName && sug.meta.stateName.toLowerCase() !== sug.term.toLowerCase() && (
+                      <span className="ml-1 opacity-75 text-[10px]">({sug.meta.stateName})</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div className="mt-3.5 flex flex-wrap items-center gap-2">
               <span className="text-[11px] font-semibold text-violet-200">Instant trip ideas:</span>

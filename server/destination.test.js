@@ -16,6 +16,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { findDestination, scoreDestination, norm, hasWord, ALIASES } from './destination.mjs'
+import { INDIA_STATES } from '../src/data/indiaStates.js'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -34,7 +35,7 @@ describe('norm()', () => {
   })
 
   it('strips punctuation', () => {
-    expect(norm("Leh, Ladakh! #1")).toBe('leh  ladakh  1')
+    expect(norm("Leh, Ladakh! #1")).toBe('leh ladakh 1')
   })
 
   it('handles empty/null', () => {
@@ -294,7 +295,6 @@ describe('ALIASES map', () => {
 
 describe('scoreDestination()', () => {
   it('gives Himachal Pradesh a higher score than Goa for "manali"', () => {
-    const { INDIA_STATES } = await import('../src/data/indiaStates.js')
     const hp = INDIA_STATES.find((s) => s.id === 'himachal-pradesh')
     const goa = INDIA_STATES.find((s) => s.id === 'goa')
     const scoreHp = scoreDestination('manali trip', hp)
@@ -303,7 +303,6 @@ describe('scoreDestination()', () => {
   })
 
   it('gives Goa the highest score for "goa beaches"', () => {
-    const { INDIA_STATES } = await import('../src/data/indiaStates.js')
     const goa = INDIA_STATES.find((s) => s.id === 'goa')
     const hp = INDIA_STATES.find((s) => s.id === 'himachal-pradesh')
     const scoreGoa = scoreDestination('goa beaches', goa)
@@ -313,7 +312,6 @@ describe('scoreDestination()', () => {
   })
 
   it('returns 0 for "fort tour" against Goa (generic first word match disabled)', () => {
-    const { INDIA_STATES } = await import('../src/data/indiaStates.js')
     const goa = INDIA_STATES.find((s) => s.id === 'goa')
     // "fort" is only 4 chars but not in Goa's name/id/aliases/capital
     // "tour" not in Goa either; total should be 0

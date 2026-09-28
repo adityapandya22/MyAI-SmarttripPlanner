@@ -72,7 +72,7 @@ function hashLocationToCoords(loc) {
     hash = (hash * 31 + loc.charCodeAt(i)) >>> 0
   }
   const lat = 8 + ((hash % 27000) / 1000)
-  const lng = 68 + (((hash >> 5) % 29000) / 1000)
+  const lng = 68 + (((hash >>> 5) % 29000) / 1000)
   return { lat: Number(lat.toFixed(4)), lng: Number(lng.toFixed(4)) }
 }
 

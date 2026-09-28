@@ -3,12 +3,21 @@ import {
   X, Search, MapPin, Calendar, Clock, Sparkles, Compass,
 } from 'lucide-react'
 import { INDIA_STATES, INDIA_REGIONS } from '../data/indiaStates'
+import { buildDestinationTrie } from '../lib/trie'
 import { useTrip, toast } from '../store'
 
 export default function IndiaStatesModal({ onClose }) {
   const [search, setSearch] = useState('')
   const [selectedRegion, setSelectedRegion] = useState('All')
   const [selectedType, setSelectedType] = useState('All') // 'All', 'State', 'Union Territory'
+
+  const trie = useMemo(() => buildDestinationTrie(INDIA_STATES), [])
+
+  const suggestions = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q || q.length < 2) return []
+    return trie.autocomplete(q, 6)
+  }, [search, trie])
 
   const createTrip = useTrip((s) => s.createTrip)
   const setCenter = useTrip((s) => s.setCenter)
@@ -18,18 +27,26 @@ export default function IndiaStatesModal({ onClose }) {
 
   const filteredStates = useMemo(() => {
     const q = search.trim().toLowerCase()
+    if (!q) {
+      return INDIA_STATES.filter((item) => {
+        if (selectedRegion !== 'All' && item.region !== selectedRegion) return false
+        if (selectedType !== 'All' && item.type !== selectedType) return false
+        return true
+      })
+    }
+    const sugStateIds = new Set(trie.autocomplete(q, 15).map((s) => s.meta?.stateId).filter(Boolean))
     return INDIA_STATES.filter((item) => {
       if (selectedRegion !== 'All' && item.region !== selectedRegion) return false
       if (selectedType !== 'All' && item.type !== selectedType) return false
-      if (!q) return true
       return (
+        sugStateIds.has(item.id) ||
         item.name.toLowerCase().includes(q) ||
         item.capital.toLowerCase().includes(q) ||
         item.topAttractions.some((a) => a.toLowerCase().includes(q)) ||
         item.tagline.toLowerCase().includes(q)
       )
     })
-  }, [search, selectedRegion, selectedType])
+  }, [search, selectedRegion, selectedType, trie])
 
   const handlePlanTrip = (state) => {
     // Create new trip with interview phase & INR currency
@@ -112,6 +129,32 @@ export default function IndiaStatesModal({ onClose }) {
               ))}
             </div>
           </div>
+
+          {/* Trie Autocomplete Suggestions */}
+          {suggestions.length > 0 && (
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-xs anim-fade-in">
+              <span className="text-orange-100 text-[11px] font-semibold flex items-center gap-1">
+                <Sparkles size={12} className="text-amber-200" /> Suggestions:
+              </span>
+              {suggestions.map((sug, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => {
+                    const st = INDIA_STATES.find((s) => s.id === sug.meta?.stateId)
+                    if (st) setSearch(st.name)
+                    else setSearch(sug.term)
+                  }}
+                  className="rounded-lg bg-white/20 hover:bg-white/35 px-2 py-0.5 text-[11px] font-medium text-white transition backdrop-blur-md border border-white/20 capitalize"
+                >
+                  {sug.term}
+                  {sug.meta?.stateName && sug.meta.stateName.toLowerCase() !== sug.term.toLowerCase() && (
+                    <span className="ml-1 opacity-75 text-[10px]">({sug.meta.stateName})</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Region pills */}
           <div className="mt-3 flex flex-wrap gap-1.5 overflow-x-auto text-[11px] pb-1 font-medium">

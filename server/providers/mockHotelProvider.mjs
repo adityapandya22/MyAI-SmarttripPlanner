@@ -79,7 +79,7 @@ function hashLocationToCoords(loc) {
   // lat: 8 + 0..27  ->  8..35  (India N-S span)
   const lat = 8 + ((hash % 27000) / 1000)
   // lng: 68 + 0..29 -> 68..97  (India W-E span)
-  const lng = 68 + (((hash >> 5) % 29000) / 1000)
+  const lng = 68 + (((hash >>> 5) % 29000) / 1000)
   return { lat: Number(lat.toFixed(4)), lng: Number(lng.toFixed(4)) }
 }
 

@@ -13,13 +13,15 @@ import { INDIA_STATES } from '../src/data/indiaStates.js'
  * @returns {string}
  */
 export const norm = (s = '') =>
-  String(s)
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
+  s == null
+    ? ''
+    : String(s)
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
 
 /**
  * Alias map – maps state id to extra tokens that should match it.

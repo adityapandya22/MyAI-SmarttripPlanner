@@ -13,6 +13,7 @@ import { findDestination } from './destination.mjs'
 
 // Re-export for backwards compatibility (tests import directly from this file)
 export { findDestination } from './destination.mjs'
+export { INDIA_STATES } from '../src/data/indiaStates.js'
 
 // Simple sleep helper that respects AbortSignal
 const isTest = typeof process !== 'undefined' && (process.env.NODE_ENV === 'test' || typeof process.env.VITEST !== 'undefined')
@@ -58,38 +59,39 @@ export function parseDaysFromText(text) {
 
 /** Day title templates for varied multi-day itineraries */
 const DAY_THEMES = [
-  (n, dest, cap) => `Day ${n}: Arrival & Exploring ${cap}`,
+  (n, dest, cap) => `Day ${n}: Arrival & Exploring ${cap || dest}`,
   (n, dest) => `Day ${n}: Heritage & Highlights of ${dest}`,
-  (n, dest) => `Day ${n}: Cultural Immersion & Local Markets`,
-  (n, dest) => `Day ${n}: Nature & Scenic Trails`,
-  (n, dest) => `Day ${n}: Hidden Gems & Off-the-beaten Path`,
-  (n, dest) => `Day ${n}: Adventure & Outdoor Excursions`,
-  (n, dest) => `Day ${n}: Sacred Temples & Spiritual Sites`,
-  (n, dest) => `Day ${n}: Art, Architecture & Museums`,
-  (n, dest) => `Day ${n}: Lakes, Gardens & Leisure`,
-  (n, dest) => `Day ${n}: Food Trail & Culinary Experiences`,
-  (n, dest) => `Day ${n}: Handicraft Villages & Artisan Workshops`,
-  (n, dest) => `Day ${n}: Sunrise Excursion & Photography`,
-  (n, dest) => `Day ${n}: Wildlife Safari & Nature Reserve`,
-  (n, dest) => `Day ${n}: Local Bazaars & Farewell`,
+  (n, dest) => `Day ${n}: Cultural Immersion in ${dest}`,
+  (n, dest) => `Day ${n}: Nature & Scenic Trails of ${dest}`,
+  (n, dest) => `Day ${n}: Hidden Gems of ${dest}`,
+  (n, dest) => `Day ${n}: Adventure & Outdoor Excursions in ${dest}`,
+  (n, dest) => `Day ${n}: Sacred Temples & Spiritual Sites in ${dest}`,
+  (n, dest) => `Day ${n}: Art, Architecture & Crafts of ${dest}`,
+  (n, dest) => `Day ${n}: Scenic Views & Leisure in ${dest}`,
+  (n, dest) => `Day ${n}: Culinary Experiences in ${dest}`,
+  (n, dest) => `Day ${n}: Artisan Workshops & Local Bazaars in ${dest}`,
+  (n, dest) => `Day ${n}: Sunrise Excursion & Photography in ${dest}`,
+  (n, dest) => `Day ${n}: Wildlife & Nature in ${dest}`,
+  (n, dest) => `Day ${n}: Farewell ${dest} & Local Souvenirs`,
 ]
 
 /**
- * Derive ISO date string offset by `offsetDays` from today (or tripStartDate if provided).
+ * Derive ISO date string offset by `offsetDays` from tripStartDate (or today+14 fallback).
  * @param {string|null} tripStartDate  ISO date string or null
  * @param {number} offsetDays
  * @returns {string}  YYYY-MM-DD
  */
 function deriveDateStr(tripStartDate, offsetDays = 0) {
-  const base = tripStartDate ? new Date(tripStartDate) : new Date()
-  if (isNaN(base.getTime())) {
-    // fallback: today + 14 days
-    const fallback = new Date()
-    fallback.setDate(fallback.getDate() + 14 + offsetDays)
-    return fallback.toISOString().slice(0, 10)
+  if (tripStartDate) {
+    const base = new Date(tripStartDate)
+    if (!isNaN(base.getTime())) {
+      base.setDate(base.getDate() + offsetDays)
+      return base.toISOString().slice(0, 10)
+    }
   }
-  base.setDate(base.getDate() + offsetDays)
-  return base.toISOString().slice(0, 10)
+  const fallback = new Date()
+  fallback.setDate(fallback.getDate() + 14 + offsetDays)
+  return fallback.toISOString().slice(0, 10)
 }
 
 /**
@@ -134,8 +136,8 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
       // Try to extract a raw place name from the text (stop at connector words)
       const rawPlace = text.match(/\bto\s+([A-Za-z]+(?:\s+[A-Za-z]+){0,3})(?=\s+(?:for|with|in|on|and|by|via|from|\d)|$)/i)?.[1]?.trim()
       const clarificationMsg = rawPlace
-        ? `I couldn't find "${rawPlace}" in my India destination database. Did you mean a specific state or city? For example, try "Himachal Pradesh", "Manali", "Goa", or "Kerala".`
-        : `I couldn't identify a destination from your request. Please name a specific Indian state, city, or landmark — for example "Rajasthan", "Manali", "Kerala backwaters".`
+        ? `I couldn't find "${rawPlace}" in my India destination database. Which destination did you mean? For example, try "Himachal Pradesh", "Manali", "Goa", or "Kerala".`
+        : `Which destination did you mean? Please name a specific Indian state, city, or landmark — for example "Rajasthan", "Manali", "Kerala backwaters".`
 
       await streamText(bridge, clarificationMsg, abortSignal, 12)
       bridge.broadcast({ type: 'assistant_text', text: clarificationMsg })
@@ -148,9 +150,9 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
     const daysCount = Math.min(userDays || matchedState?.suggestedDays || 5, 14)
     const coords = matchedState?.coords || { lat: 26.9124, lng: 75.7873 }
 
-    // TASK 3d: Derive dates from startDate or today + 14
-    const checkin = deriveDateStr(startDate, 14)
-    const checkout = deriveDateStr(startDate, 15)
+    // Derive dates from startDate (offset 0 and 1) or fallback (today+14, today+15)
+    const checkin = deriveDateStr(startDate, 0)
+    const checkout = deriveDateStr(startDate, 1)
 
     // 1. Set Trip Meta
     bridge.broadcast({ type: 'agent_tool', name: 'set_trip_meta', args: { title: `Trip to ${destName}`, currency: cur, car_gas_unit: 'inr_l' } })
@@ -285,7 +287,13 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
 
   // TASK 3b: Word-boundary safe intent checks
   if (intentMatches(text, 'food', 'eat', 'eating', 'restaurant', 'dining', 'dinner', 'lunch', 'breakfast', 'ristorante')) {
-    const loc = matchedState ? primaryCapital(matchedState.capital) : 'Jaipur'
+    if (!matchedState) {
+      const askMsg = 'Which destination did you mean? Please mention a specific city or state so I can recommend authentic dining spots.'
+      await streamText(bridge, askMsg, abortSignal)
+      bridge.broadcast({ type: 'assistant_text', text: askMsg })
+      return
+    }
+    const loc = primaryCapital(matchedState.capital)
     bridge.broadcast({ type: 'agent_tool', name: 'search_restaurants', args: { location: loc } })
     try {
       await bridge.callBrowser('search_restaurants', { location: loc, query: 'local authentic', currency: cur })
@@ -299,9 +307,15 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
   }
 
   if (intentMatches(text, 'hotel', 'hotels', 'stay', 'staying', 'accommodation', 'lodge', 'albergo')) {
-    const loc = matchedState ? primaryCapital(matchedState.capital) : 'Jaipur'
-    const checkin = deriveDateStr(startDate, 14)
-    const checkout = deriveDateStr(startDate, 15)
+    if (!matchedState) {
+      const askMsg = 'Which destination did you mean? Please mention a specific city or state so I can search for verified accommodations.'
+      await streamText(bridge, askMsg, abortSignal)
+      bridge.broadcast({ type: 'assistant_text', text: askMsg })
+      return
+    }
+    const loc = primaryCapital(matchedState.capital)
+    const checkin = deriveDateStr(startDate, 0)
+    const checkout = deriveDateStr(startDate, 1)
     bridge.broadcast({ type: 'agent_tool', name: 'search_hotels', args: { location: loc, currency: cur } })
     try {
       await bridge.callBrowser('search_hotels', { location: loc, checkin, checkout, currency: cur })

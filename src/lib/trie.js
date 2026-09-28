@@ -107,7 +107,7 @@ export class Trie {
  * @param {object}   ALIASES       – alias map from destination.mjs
  * @returns {Trie}
  */
-export function buildDestinationTrie(INDIA_STATES, ALIASES) {
+export function buildDestinationTrie(INDIA_STATES, ALIASES = {}) {
   const trie = new Trie()
   const norm = (s = '') => String(s).toLowerCase().trim().replace(/\s+/g, ' ')
 

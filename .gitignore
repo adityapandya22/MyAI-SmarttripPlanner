@@ -13,5 +13,5 @@ docs/going-public-plan.md
 HANDOFF.md
 
 # local user data and secrets — never commit
-data/
+/data/
 .env*
