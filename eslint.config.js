@@ -37,10 +37,7 @@ export default [
       ...reactPlugin.configs.flat.recommended.rules,
       ...reactPlugin.configs.flat['jsx-runtime'].rules,
       ...reactHooksPlugin.configs['recommended-latest'].rules,
-      'react-refresh/only-export-components': [
-        'warn',
-        { allowConstantExport: true },
-      ],
+      'react-refresh/only-export-components': 'off',
       'react/prop-types': 'off',
       'react/no-unescaped-entities': 'off',
       'no-irregular-whitespace': ['error', { skipRegExps: true, skipStrings: true }],

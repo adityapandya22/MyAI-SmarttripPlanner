@@ -273,6 +273,19 @@ If this project is useful to you, consider supporting its development:
 - [Discussions](https://github.com/Prot10/MyTripPlanner/discussions)
 - [Star on GitHub](https://github.com/Prot10/MyTripPlanner) — it helps a lot!
 
+## Attribution & Fork Credits
+
+This repository is built upon the open-source project **[Prot10/MyTripPlanner](https://github.com/Prot10/MyTripPlanner)** created by Andrea Protani, licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. The original LICENSE file is preserved in this repository.
+
+### Key Custom Contributions & Enhancements
+- **India Travel Dataset (`src/data/indiaStates.js`)**: All 28 Indian States and 8 Union Territories with verified geographical centres, capitals, suggested itineraries, curated top attractions, and regional categorization (`INDIA_REGIONS`).
+- **Scored Whole-Word Destination Matcher (`server/destination.mjs`)**: Scored matching algorithm with word-boundary checks, comprehensive alias mappings, and confidence thresholding to prevent false positives (e.g. "great" never matches "eat", "Old Manali" never falsely matches Goa, and unrecognised queries ask "Which destination did you mean?" instead of silently defaulting to Jaipur).
+- **Trie Prefix Autocomplete Engine (`src/lib/trie.js`)**: Custom prefix tree data structure enabling instant autocomplete across states, capitals, aliases, and attractions, integrated directly into search inputs and the dashboard prompt.
+- **Autonomous Free AI Travel Agent (`server/freeAgent.mjs`)**: Zero-subscription, zero-login intelligent planner with multi-day itinerary generation, calendar-aware hotel checkin/checkout derivation from trip start dates, and clear conversational clarification.
+- **India-Centric Mock Providers (`server/providers/`)**: Mock hotel and dining providers updated with deterministic India-bounded coordinate generation and native Indian Rupee (₹ INR) pricing.
+- **Geocoding & Place Search Hardening (`src/lib/geo.js`)**: Normalized caching, AbortController timeout handling, request ID anti-stale protection, and automatic country code scoping (`countrycodes=in`).
+- **Zod Schema Validation & Error Boundaries (`server/storage.mjs`, `src/components/ErrorBoundary.jsx`)**: Robust runtime validation with Zod `TripSchema` and resilient React error boundaries around Map, Chat, and Itinerary views.
+
 ## License
 
 This project is licensed under the **GNU Affero General Public License v3.0** — see [LICENSE](LICENSE).
