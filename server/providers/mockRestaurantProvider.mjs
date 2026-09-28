@@ -1,79 +1,83 @@
+// Base price ranges in INR for India-appropriate restaurant mock data
 const SAMPLE_RESTAURANT_TEMPLATES = [
   {
-    namePrefix: 'Trattoria Da Marco',
+    namePrefix: 'Spice Garden',
     rating: 4.7,
     review_count: 1850,
-    price_range: '€20–30',
-    category: 'Traditional Trattoria',
-    addressSuffix: 'Via Roma 12',
+    price_range: '\u20b9800\u20131,500',
+    category: 'North Indian & Mughlai',
+    addressSuffix: 'Main Market Road',
     latOffset: 0.003,
     lngOffset: -0.002,
   },
   {
-    namePrefix: 'Osteria Del Centro',
+    namePrefix: 'The Biryani House',
     rating: 4.6,
     review_count: 2420,
-    price_range: '€15–25',
-    category: 'Osteria & Wine Bar',
-    addressSuffix: 'Piazza del Popolo 5',
+    price_range: '\u20b9400\u2013800',
+    category: 'Biryani & Kebabs',
+    addressSuffix: 'Near Clock Tower',
     latOffset: -0.002,
     lngOffset: 0.004,
   },
   {
-    namePrefix: 'Ristorante Bellavista',
+    namePrefix: 'Royal Thali Palace',
     rating: 4.8,
     review_count: 980,
-    price_range: '€40–60',
-    category: 'Fine Dining & Seafood',
-    addressSuffix: 'Via Panorama 18',
+    price_range: '\u20b91,800\u20133,000',
+    category: 'Fine Dining & Multi-Cuisine',
+    addressSuffix: 'Hotel Complex, MG Road',
     latOffset: 0.006,
     lngOffset: 0.007,
   },
   {
-    namePrefix: 'Pizzeria Bella Napoli',
+    namePrefix: 'Desi Dhaba',
     rating: 4.5,
     review_count: 3100,
-    price_range: '€12–20',
-    category: 'Pizza & Fritti',
-    addressSuffix: 'Corso Vittorio Emanuele 44',
+    price_range: '\u20b9500\u20131,000',
+    category: 'Punjabi & Street Food',
+    addressSuffix: 'Highway Chowk',
     latOffset: -0.004,
     lngOffset: -0.005,
   },
   {
-    namePrefix: 'Il Porticciolo',
+    namePrefix: 'South Indian Sagar',
     rating: 4.4,
     review_count: 670,
-    price_range: '€25–35',
-    category: 'Seafood Restaurant',
-    addressSuffix: 'Lungomare Porto 3',
+    price_range: '\u20b9600\u20131,200',
+    category: 'South Indian Vegetarian',
+    addressSuffix: 'Temple Street',
     latOffset: 0.008,
     lngOffset: -0.006,
   },
   {
-    namePrefix: 'Caffè & Cucina Storica',
+    namePrefix: 'Chai & Snacks Corner',
     rating: 4.3,
     review_count: 420,
-    price_range: '€10–18',
-    category: 'Café & Bistro',
-    addressSuffix: 'Via Garibaldi 8',
+    price_range: '\u20b9100\u2013300',
+    category: 'Chai Cafe & Quick Bites',
+    addressSuffix: 'Bus Stand Road',
     latOffset: -0.001,
     lngOffset: -0.003,
   },
 ]
 
-// Simple deterministic hash to get reasonable base coordinates for any location name
+/**
+ * Deterministic hash-based coordinates centred within India.
+ * India lat range: ~8-35, lng range: ~68-97
+ */
 function hashLocationToCoords(loc) {
   let hash = 0
   for (let i = 0; i < loc.length; i++) {
     hash = (hash * 31 + loc.charCodeAt(i)) >>> 0
   }
-  const lat = 40 + ((hash % 10000) / 1000)
-  const lng = 10 + (((hash >> 4) % 10000) / 1000)
+  const lat = 8 + ((hash % 27000) / 1000)
+  const lng = 68 + (((hash >> 5) % 29000) / 1000)
   return { lat: Number(lat.toFixed(4)), lng: Number(lng.toFixed(4)) }
 }
 
 /**
- * Mock restaurant search provider returning realistic fake data without network/browser.
+ * Mock restaurant search provider returning realistic India-centric fake data.
  * @implements {import('./types.mjs').RestaurantProvider}
  */
 export class MockRestaurantProvider {
@@ -86,7 +90,7 @@ export class MockRestaurantProvider {
     const what = String(args?.query ?? '').trim()
     const maxResults = Math.max(2, Math.min(6, Number(args?.max_results) || 4))
 
-    if (!location) throw new Error('location mancante.')
+    if (!location) throw new Error('location is required.')
 
     const searchQuery = what ? `${what} in ${location}` : `restaurants in ${location}`
     const searchUrl =
@@ -106,17 +110,26 @@ export class MockRestaurantProvider {
         '&query_place_id=' +
         placeId
 
+      // Base price_range is in INR; convert to USD or EUR if requested
       let priceRange = tmpl.price_range
-      if (args?.currency === 'INR') {
-        priceRange = tmpl.price_range
-          .replace('€10–18', '₹400–800')
-          .replace('€12–20', '₹500–1,000')
-          .replace('€15–25', '₹600–1,200')
-          .replace('€20–30', '₹800–1,500')
-          .replace('€25–35', '₹1,000–1,800')
-          .replace('€40–60', '₹1,800–3,000')
-      } else if (args?.currency === 'USD') {
-        priceRange = tmpl.price_range.replace(/€/g, '$')
+      if (args?.currency === 'USD') {
+        priceRange = priceRange
+          .replace('\u20b9100\u2013300', '$1\u20134')
+          .replace('\u20b9400\u2013800', '$5\u201310')
+          .replace('\u20b9500\u20131,000', '$6\u201312')
+          .replace('\u20b9600\u20131,200', '$7\u201315')
+          .replace('\u20b9800\u20131,500', '$10\u201318')
+          .replace('\u20b91,000\u20131,800', '$12\u201322')
+          .replace('\u20b91,800\u20133,000', '$22\u201336')
+      } else if (args?.currency === 'EUR') {
+        priceRange = priceRange
+          .replace('\u20b9100\u2013300', '\u20ac1\u20134')
+          .replace('\u20b9400\u2013800', '\u20ac5\u20139')
+          .replace('\u20b9500\u20131,000', '\u20ac6\u201311')
+          .replace('\u20b9600\u20131,200', '\u20ac7\u201314')
+          .replace('\u20b9800\u20131,500', '\u20ac9\u201317')
+          .replace('\u20b91,000\u20131,800', '\u20ac11\u201320')
+          .replace('\u20b91,800\u20133,000', '\u20ac20\u201333')
       }
 
       return {
@@ -124,7 +137,7 @@ export class MockRestaurantProvider {
         rating: tmpl.rating,
         review_count: tmpl.review_count,
         price_range: priceRange,
-        category: what ? `${what} · ${tmpl.category}` : tmpl.category,
+        category: what ? `${what} \u00b7 ${tmpl.category}` : tmpl.category,
         address,
         lat: Number((baseCoords.lat + tmpl.latOffset).toFixed(5)),
         lng: Number((baseCoords.lng + tmpl.lngOffset).toFixed(5)),
@@ -146,7 +159,7 @@ export class MockRestaurantProvider {
       search_url: searchUrl,
       results_found: 18,
       places: places.slice(0, maxResults),
-      note: `[MOCK] Dati simulati Google Maps per test/demo, ordinati per qualità AFFIDABILE.`,
+      note: `[MOCK] Simulated Google Maps data for test/demo, sorted by quality. Coordinates are within the requested destination in India.`,
     }
   }
 }

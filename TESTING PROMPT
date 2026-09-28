@@ -1,0 +1,74 @@
+ROLE: Senior full - stack developer + QA engineer.Work inside this repo(React 19 + Vite + zustand + Leaflet frontend, Node server in /server).Be evidence - driven: reproduce each bug BEFORE fixing it, and if any claim below turns out wrong, tell me instead of forcing a fix.
+
+PRIMARY BUG
+Searching a destination such as "Himachal", "Old Manali trip" or "fort tour" returns Goa(or silently falls back to Jaipur / New Delhi).
+Suspected root cause: findDestination() in server / freeAgent.mjs loops over INDIA_STATES in alphabetical order and returns the first loose substring match.One of its tests checks whether the query contains the FIRST WORD of ANY attraction name(e.g. "old", "fort", "beach"), so Goa wins for generic words.A bare "himachal" matches nothing and falls back to default coordinates.
+
+    TASKS(do in this order)
+
+0. BASELINE
+    - Run`npm install`, then`npm run lint`, `npm run build`, `npm test`.Record all failures before changing anything.
+   - Confirm that src / data / indiaStates.js exists and is tracked by git.It is imported by server / freeAgent.mjs, src / components / IndiaStatesModal.jsx and src / lib / utils.test.js, but was MISSING from my upload.If it is missing, recreate it with all 28 states + 8 UTs.Each entry needs: id(kebab -case), name, capital, region, type('State' | 'Union Territory'), coords { lat, lng }, suggestedDays, tagline, promptTemplate, topAttractions(array of names, each with real lat / lng where possible). Also export INDIA_REGIONS.Check how IndiaStatesModal.jsx and utils.test.js use these fields and match them exactly.
+
+1. FIX findDestination(main bug)
+   Replace it in server / freeAgent.mjs with this scored whole - word matcher(put it in its own module server / destination.mjs and import it):
+
+const norm = (s = '') => String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()
+const ALIASES = {
+    'himachal-pradesh': ['himachal', 'hp', 'shimla', 'manali', 'dharamshala', 'kullu', 'spiti', 'kasol', 'dalhousie'],
+    goa: ['goa', 'panaji', 'panjim', 'baga', 'calangute'],
+    'jammu-and-kashmir': ['kashmir', 'srinagar', 'gulmarg', 'pahalgam'],
+    'uttar-pradesh': ['varanasi', 'benares', 'agra', 'lucknow'],
+    rajasthan: ['jaipur', 'udaipur', 'jodhpur', 'jaisalmer'],
+    kerala: ['kerala', 'kochi', 'munnar', 'alleppey', 'alappuzha'],
+}   // extend to ALL states/UTs and major tourist towns
+const hasWord = (h, n) => n && new RegExp(`(?:^| )${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?: |$)`).test(h)
+export function scoreDestination(text, s) {
+    const q = norm(text); let score = 0
+    const name = norm(s.name)
+    if (hasWord(q, name)) score += 100
+    const head = name.split(' ')[0]
+    if (head.length > 3 && hasWord(q, head)) score += 90
+    if (hasWord(q, norm(s.id?.replace(/-/g, ' ')))) score += 90
+    for (const a of ALIASES[s.id] || []) if (hasWord(q, norm(a))) score += 70
+    const cap = norm(s.capital || '').split(/ or | and |,|\(/)[0].trim()
+    if (cap && hasWord(q, cap)) score += 60
+    for (const a of s.topAttractions || []) if (hasWord(q, norm(a))) score += 40   // FULL names only
+    return score
+}
+export function findDestination(text = '') {
+    let best = null, bestScore = 0
+    for (const s of INDIA_STATES) { const sc = scoreDestination(text, s); if (sc > bestScore) { best = s; bestScore = sc } }
+    return bestScore >= 60 ? best : null
+}
+
+   Also add a Trie(prefix tree) over state names, capitals, aliases and attractions, and use it for autocomplete in the search boxes(IndiaStatesModal.jsx and the dashboard prompt input).Give it clean insert / search / startsWith methods with unit tests, so it counts as real DSA work.
+
+2. NEVER GUESS SILENTLY
+    - If findDestination returns null, the agent must ask "Which destination did you mean?" and must NOT build a trip or fall back to Jaipur / New Delhi / "Incredible India".
+   - Fix the destination regex(`to\s+([A-Za-z\s]+)` swallows the rest of the sentence).Capture only the place name and stop at words like for/with/in / on / and.
+
+3. FIX RELATED BUGS IN server / freeAgent.mjs
+a. `capital.split(' ')[0]` turns "New Delhi" into "New" and "Port Blair" into "Port".Use the full first capital name(split on " or " / "," only).
+    b.Intent keywords(food / eat / hotel / stay / add day) use includes(); "eat" matches "great" and "theatre".Use word - boundary regexes.
+        c.Stops use state centre + Math.random() offsets, which are fake and differ every run.Use real per - attraction lat / lng from indiaStates.js; if missing, geocode "<attraction>, <state>, India" via Nominatim(src / lib / geo.js) with caching, and fall back to the state centre WITHOUT randomness.
+            d.Check -in /check-out '2026-10-15'/'2026-10-16' are hard - coded.Derive them from the trip's start date (or today + 14 days if none).
+e.Make sure every runFreeAgent code path has try/catch, respects abortSignal, and never leaves the UI stuck loading.
+
+4. MOCK PROVIDERS(server / providers / mockHotelProvider.mjs, mockRestaurantProvider.mjs)
+hashLocationToCoords() puts every place at lat 40–50, lng 10–20(Europe) and prices are in EUR.Make the mocks use the requested destination's real coordinates and the trip currency (INR), so mock mode gives destination-correct data.
+
+5. GEOCODING(src / lib / geo.js searchPlaces)
+   Normalize the query, key the cache on the normalized query, send`countrycodes=in` when the trip is India - based, add AbortController + a request id so stale responses can't overwrite newer ones, show a clear "No results for 'X'" message on empty/failed responses, and for regions/states use the result's boundingbox to fit the map.
+
+6. FULL BUG SWEEP(as a tester)
+   Audit and fix: console errors, unhandled promise rejections, fetches without try/catch, missing loading/empty / error states, effect cleanup leaks, mobile layout issues, invalid JSON import /export (use the zod TripSchema plan from prompt.txt in server/storage.mjs), ErrorBoundary coverage around the map and chat panels, and README / env -var accuracy.Also remove unused code and fix every eslint warning.
+
+7. TESTS(Vitest; config exists)
+   Add tests for: himachal, "Himachal Pradesh", manali, shimla, goa, "old manali"(must NOT return Goa), "fort tour"(must return null), kerala, leh ladakh, typos, empty string, extra whitespace, mixed case, special characters, very long input, non - English input, rapid consecutive searches, cache hit vs miss, Trie behaviour, capital parsing, keyword false positives("great"), and mock providers returning INR + in -India coordinates.Add a regression test named "does not return Goa for generic words".Assert that coordinates fall inside the expected region(Himachal roughly lat 30.4–33.2, lng 75.6–79.0).
+
+8. ATTRIBUTION(important)
+   This repo is derived from Prot10 / MyTripPlanner, which is AGPL - 3.0.Keep LICENSE, add a clear "Based on Prot10/MyTripPlanner" credit section to README.md, and list my own contributions(destination matcher, Trie autocomplete, bug fixes, tests).
+
+    DELIVERABLES
+    (1) Root - cause explanation with file names and line numbers, (2) table of every bug found: severity / file / fix, (3) the diffs, (4) final results of`npm run lint`, `npm run build` and`npm test`, (5) a short manual QA checklist I can run in the browser(Himachal, Old Manali, Goa, "fort tour", empty search, offline).Keep the happy path working and make minimal, focused changes.

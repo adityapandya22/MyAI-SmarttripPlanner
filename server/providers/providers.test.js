@@ -156,22 +156,22 @@ describe('MockRestaurantProvider', () => {
   const provider = new MockRestaurantProvider()
 
   it('throws when location is missing', async () => {
-    await expect(provider.searchRestaurants({})).rejects.toThrow('location mancante.')
-    await expect(provider.searchRestaurants({ location: '   ' })).rejects.toThrow('location mancante.')
+    await expect(provider.searchRestaurants({})).rejects.toThrow('location is required.')
+    await expect(provider.searchRestaurants({ location: '   ' })).rejects.toThrow('location is required.')
   })
 
   it('returns valid restaurant search result matching places.mjs schema', async () => {
     const res = await provider.searchRestaurants({
-      location: 'Taormina',
-      query: 'seafood',
+      location: 'Jaipur',
+      query: 'biryani',
       max_results: 3,
     })
 
     expect(res).toMatchObject({
-      location: 'Taormina',
-      query: 'seafood in Taormina',
+      location: 'Jaipur',
+      query: 'biryani in Jaipur',
     })
-    expect(res.search_url).toContain('Taormina')
+    expect(res.search_url).toContain('Jaipur')
     expect(res.places).toHaveLength(3)
 
     for (const place of res.places) {
@@ -191,11 +191,11 @@ describe('MockRestaurantProvider', () => {
 
   it('defaults query to restaurants in location when unspecified', async () => {
     const res = await provider.searchRestaurants({
-      location: 'Bologna',
+      location: 'Goa',
       max_results: 2,
     })
 
-    expect(res.query).toBe('restaurants in Bologna')
+    expect(res.query).toBe('restaurants in Goa')
     expect(res.places).toHaveLength(2)
   })
 })
@@ -217,25 +217,25 @@ describe('Tool Handler Integration with Mock Provider', () => {
 
   it('delegates search_hotels to MockHotelProvider via searchHotels export', async () => {
     const res = await searchHotels({
-      location: 'Napoli',
+      location: 'Jaipur',
       checkin: '2026-08-10',
       checkout: '2026-08-12',
       max_results: 2,
     })
 
-    expect(res.location).toBe('Napoli')
+    expect(res.location).toBe('Jaipur')
     expect(res.properties).toHaveLength(2)
     expect(res.note).toContain('[MOCK]')
   })
 
   it('delegates search_restaurants to MockRestaurantProvider via searchRestaurants export', async () => {
     const res = await searchRestaurants({
-      location: 'Napoli',
-      query: 'pizza',
+      location: 'Goa',
+      query: 'seafood',
       max_results: 2,
     })
 
-    expect(res.location).toBe('Napoli')
+    expect(res.location).toBe('Goa')
     expect(res.places).toHaveLength(2)
     expect(res.note).toContain('[MOCK]')
   })
@@ -243,7 +243,7 @@ describe('Tool Handler Integration with Mock Provider', () => {
   it('makeToolHandler executes search_hotels with mock provider without opening browser', async () => {
     const handler = makeToolHandler(null, 'search_hotels')
     const response = await handler({
-      location: 'Siena',
+      location: 'Shimla',
       checkin: '2026-09-01',
       checkout: '2026-09-03',
       max_results: 3,
@@ -251,21 +251,98 @@ describe('Tool Handler Integration with Mock Provider', () => {
 
     expect(response.isError).toBe(false)
     const payload = JSON.parse(response.content[0].text)
-    expect(payload.location).toBe('Siena')
+    expect(payload.location).toBe('Shimla')
     expect(payload.properties).toHaveLength(3)
   })
 
   it('makeToolHandler executes search_restaurants with mock provider without opening browser', async () => {
     const handler = makeToolHandler(null, 'search_restaurants')
     const response = await handler({
-      location: 'Siena',
-      query: 'wine bar',
+      location: 'Manali',
+      query: 'local food',
       max_results: 2,
     })
 
     expect(response.isError).toBe(false)
     const payload = JSON.parse(response.content[0].text)
-    expect(payload.location).toBe('Siena')
+    expect(payload.location).toBe('Manali')
     expect(payload.places).toHaveLength(2)
+  })
+})
+
+// ── INR + India coordinate assertions ────────────────────────────────────────
+
+describe('Mock providers – INR prices and India-centred coordinates', () => {
+  it('MockHotelProvider returns INR prices for Indian destinations', async () => {
+    const provider = new MockHotelProvider()
+    const res = await provider.searchHotels({
+      location: 'Shimla',
+      checkin: '2026-10-01',
+      checkout: '2026-10-02',
+      currency: 'INR',
+    })
+
+    expect(res.properties.length).toBeGreaterThan(0)
+    for (const prop of res.properties) {
+      expect(prop.currency).toBe('INR')
+      if (prop.available) {
+        // INR prices should be in reasonable India hotel range (500 - 30000 per night)
+        expect(prop.price_per_night).toBeGreaterThan(500)
+        expect(prop.price_per_night).toBeLessThan(30000)
+      }
+    }
+  })
+
+  it('MockHotelProvider coordinates fall within India bounds (lat 6-37, lng 65-100)', async () => {
+    const provider = new MockHotelProvider()
+    const res = await provider.searchHotels({
+      location: 'Jaipur',
+      checkin: '2026-10-01',
+      checkout: '2026-10-03',
+      currency: 'INR',
+    })
+
+    for (const prop of res.properties) {
+      expect(prop.lat).toBeGreaterThan(6)
+      expect(prop.lat).toBeLessThan(37)
+      expect(prop.lng).toBeGreaterThan(65)
+      expect(prop.lng).toBeLessThan(100)
+    }
+  })
+
+  it('MockRestaurantProvider returns INR price ranges by default', async () => {
+    const provider = new MockRestaurantProvider()
+    const res = await provider.searchRestaurants({
+      location: 'Kerala',
+      currency: 'INR',
+    })
+
+    for (const place of res.places) {
+      expect(place.price_range).toMatch(/\u20b9/)  // ₹ symbol
+    }
+  })
+
+  it('MockRestaurantProvider coordinates fall within India bounds (lat 6-37, lng 65-100)', async () => {
+    const provider = new MockRestaurantProvider()
+    const res = await provider.searchRestaurants({
+      location: 'Goa',
+      max_results: 4,
+    })
+
+    for (const place of res.places) {
+      expect(place.lat).toBeGreaterThan(6)
+      expect(place.lat).toBeLessThan(37)
+      expect(place.lng).toBeGreaterThan(65)
+      expect(place.lng).toBeLessThan(100)
+    }
+  })
+
+  it('MockHotelProvider prices are deterministic (same result on repeated call)', async () => {
+    const provider = new MockHotelProvider()
+    const args = { location: 'Manali', checkin: '2026-11-01', checkout: '2026-11-02', currency: 'INR' }
+    const r1 = await provider.searchHotels(args)
+    const r2 = await provider.searchHotels(args)
+    expect(r1.properties[0].price_per_night).toBe(r2.properties[0].price_per_night)
+    expect(r1.properties[0].lat).toBe(r2.properties[0].lat)
   })
 })

@@ -1,9 +1,10 @@
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
+// Base rates in INR (Indian Rupees) for realistic India hotel pricing
 const SAMPLE_HOTEL_TEMPLATES = [
   {
     nameSuffix: 'Grand Hotel & Suites',
-    baseRatePerNightEur: 165,
+    baseRatePerNightInr: 8500,
     score: 9.3,
     reviews: 1420,
     available: true,
@@ -12,7 +13,7 @@ const SAMPLE_HOTEL_TEMPLATES = [
   },
   {
     nameSuffix: 'Boutique Hotel & Spa',
-    baseRatePerNightEur: 135,
+    baseRatePerNightInr: 6500,
     score: 8.9,
     reviews: 980,
     available: true,
@@ -20,8 +21,8 @@ const SAMPLE_HOTEL_TEMPLATES = [
     lngOffset: 0.006,
   },
   {
-    nameSuffix: 'Historic Center Suites',
-    baseRatePerNightEur: 115,
+    nameSuffix: 'Heritage Haveli Suites',
+    baseRatePerNightInr: 5200,
     score: 8.7,
     reviews: 620,
     available: true,
@@ -29,8 +30,8 @@ const SAMPLE_HOTEL_TEMPLATES = [
     lngOffset: 0.004,
   },
   {
-    nameSuffix: 'Riverside Lodge',
-    baseRatePerNightEur: 95,
+    nameSuffix: 'River View Resort',
+    baseRatePerNightInr: 4000,
     score: 8.4,
     reviews: 430,
     available: true,
@@ -38,8 +39,8 @@ const SAMPLE_HOTEL_TEMPLATES = [
     lngOffset: -0.005,
   },
   {
-    nameSuffix: 'Cozy B&B',
-    baseRatePerNightEur: 75,
+    nameSuffix: 'Budget Traveller Inn',
+    baseRatePerNightInr: 1800,
     score: 9.1,
     reviews: 310,
     available: true,
@@ -47,8 +48,8 @@ const SAMPLE_HOTEL_TEMPLATES = [
     lngOffset: 0.002,
   },
   {
-    nameSuffix: 'Panorama View Hotel',
-    baseRatePerNightEur: 190,
+    nameSuffix: 'Panorama Hill Resort',
+    baseRatePerNightInr: 11000,
     score: 9.6,
     reviews: 840,
     available: false,
@@ -56,8 +57,8 @@ const SAMPLE_HOTEL_TEMPLATES = [
     lngOffset: -0.008,
   },
   {
-    nameSuffix: 'Modern City Loft',
-    baseRatePerNightEur: 105,
+    nameSuffix: 'Modern City Stay',
+    baseRatePerNightInr: 3500,
     score: 8.2,
     reviews: 210,
     available: true,
@@ -66,15 +67,19 @@ const SAMPLE_HOTEL_TEMPLATES = [
   },
 ]
 
-// Simple deterministic hash to get reasonable base coordinates for any location name
+/**
+ * Deterministic hash-based coordinates centred within India.
+ * India lat range: ~8-35, lng range: ~68-97
+ */
 function hashLocationToCoords(loc) {
   let hash = 0
   for (let i = 0; i < loc.length; i++) {
     hash = (hash * 31 + loc.charCodeAt(i)) >>> 0
   }
-  // Deterministic coordinate in typical mid-latitudes
-  const lat = 40 + ((hash % 10000) / 1000)
-  const lng = 10 + (((hash >> 4) % 10000) / 1000)
+  // lat: 8 + 0..27  ->  8..35  (India N-S span)
+  const lat = 8 + ((hash % 27000) / 1000)
+  // lng: 68 + 0..29 -> 68..97  (India W-E span)
+  const lng = 68 + (((hash >> 5) % 29000) / 1000)
   return { lat: Number(lat.toFixed(4)), lng: Number(lng.toFixed(4)) }
 }
 
@@ -120,9 +125,12 @@ export class MockHotelProvider {
 
     const properties = SAMPLE_HOTEL_TEMPLATES.map((tmpl, idx) => {
       const available = tmpl.available
-      // Scale EUR price to USD (~1.08x) or INR (~90x) if requested
-      const rateMultiplier = (currency === 'INR' ? 90 : currency === 'USD' ? 1.08 : 1) * rooms
-      const rawPrice = tmpl.baseRatePerNightEur * rateMultiplier
+      // Base rates are stored in INR; convert to other currencies if needed
+      const inrRate = tmpl.baseRatePerNightInr * rooms
+      let rawPrice
+      if (currency === 'USD') rawPrice = inrRate / 84
+      else if (currency === 'EUR') rawPrice = inrRate / 90
+      else rawPrice = inrRate
       const pricePerNight = available
         ? (currency === 'INR' ? Math.round(rawPrice / 50) * 50 : Math.round(rawPrice))
         : null
@@ -171,7 +179,7 @@ export class MockHotelProvider {
       search_url: searchUrl,
       results_found: 24,
       properties: properties.slice(0, maxResults),
-      note: `[MOCK] Prezzi TOTALI reali per ${nights} notti, ${adults} adulti (Booking.com simulation), ordinati per qualità AFFIDABILE.`,
+      note: `[MOCK] Total prices for ${nights} nights, ${adults} adults (Booking.com simulation), sorted by quality. Coordinates are within the requested destination in India.`,
     }
   }
 }

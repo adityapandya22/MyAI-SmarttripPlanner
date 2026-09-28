@@ -118,18 +118,84 @@ export async function estimateTravel(from, to, mode) {
 
 /* ---------- place search (Nominatim, free) ---------- */
 
-export async function searchPlaces(q) {
-  const r = await fetch(
-    `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&accept-language=${i18n.language}&q=${encodeURIComponent(q)}`,
-  )
-  if (!r.ok) return []
-  const data = await r.json()
-  return data.map((p) => ({
-    lat: +(+p.lat).toFixed(5),
-    lng: +(+p.lon).toFixed(5),
-    name: p.display_name,
-    short: p.display_name.split(',')[0],
-  }))
+/** Normalize a search query for consistent caching and cleaner Nominatim results. */
+function normQuery(q) {
+  return String(q).trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+// Simple in-memory search cache to avoid duplicate requests
+const placeSearchCache = new Map()
+// Counter used to detect stale concurrent requests
+let _searchReqId = 0
+
+/**
+ * Search for places using Nominatim (free OSM geocoder).
+ * - Normalizes the query and caches on the normalized key
+ * - Adds countrycodes=in when the query looks India-related
+ * - Uses a request ID so stale responses never overwrite newer ones
+ * - Returns [] on empty/error (never throws)
+ *
+ * @param {string} q  raw search query
+ * @param {object} [opts]
+ * @param {boolean} [opts.indiaOnly]  force countrycodes=in
+ * @returns {Promise<Array<{lat,lng,name,short,boundingbox}>>}
+ */
+export async function searchPlaces(q, opts = {}) {
+  const normalized = normQuery(q)
+  if (!normalized) return []
+
+  const cacheKey = opts.indiaOnly ? `in:${normalized}` : normalized
+  if (placeSearchCache.has(cacheKey)) return placeSearchCache.get(cacheKey)
+
+  const reqId = ++_searchReqId
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 8000)
+
+  // Add countrycodes=in when explicitly requested OR when query looks India-specific
+  const isIndia = opts.indiaOnly ||
+    /\b(india|bharat|\bap\b|hp\b|up\b|rajasthan|gujarat|kerala|karnataka|tamil|bengal|odisha|assam|delhi|mumbai|kolkata|chennai|hyderabad|bengaluru|bangalore|pune|jaipur|lucknow|varanasi|agra|goa|shimla|manali|ladakh|kashmir)\b/i
+      .test(normalized)
+
+  const params = new URLSearchParams({
+    format: 'jsonv2',
+    limit: '6',
+    'accept-language': i18n.language,
+    q: normalized,
+  })
+  if (isIndia) params.set('countrycodes', 'in')
+
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+      signal: controller.signal,
+    })
+    clearTimeout(timeout)
+
+    // Ignore stale response if a newer request has started
+    if (reqId !== _searchReqId) return []
+
+    if (!r.ok) return []
+    const data = await r.json()
+    if (!Array.isArray(data) || data.length === 0) return []
+
+    const results = data.map((p) => ({
+      lat: +(+p.lat).toFixed(5),
+      lng: +(+p.lon).toFixed(5),
+      name: p.display_name,
+      short: p.display_name.split(',')[0],
+      boundingbox: p.boundingbox,   // [south, north, west, east] strings
+    }))
+
+    placeSearchCache.set(cacheKey, results)
+    return results
+  } catch (err) {
+    clearTimeout(timeout)
+    if (err?.name === 'AbortError') {
+      console.warn('[geo] searchPlaces timeout for query:', normalized)
+    } else {
+      console.error('[geo] searchPlaces error:', err)
+    }
+    return []
+  }
 }
 
 /* ---------- turn-by-turn directions (OSRM, free) ---------- */
