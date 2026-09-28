@@ -20,7 +20,7 @@ export function HotelPickRecord({ m }) {
           <span className="inline-flex flex-wrap items-center gap-1.5 rounded-lg bg-white px-2 py-1 text-[12px] font-semibold text-violet-800 ring-1 ring-violet-200">
             <Check size={11} strokeWidth={3} className="text-violet-500" />
             {chosen.name}
-            <span className="font-medium text-ink-400">{fmtMoney(chosen.price_per_night, chosen.currency ?? 'EUR')}{t('hotels.perNight')}</span>
+            <span className="font-medium text-ink-400">{fmtMoney(chosen.price_per_night, chosen.currency ?? 'INR')}{t('hotels.perNight')}</span>
           </span>
         ) : m.choice ? (
           <span className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2 py-1 text-[12px] font-semibold text-violet-800 ring-1 ring-violet-200">

@@ -12,7 +12,7 @@ import { ItemThumb } from './ItemImage'
 
 export default function ItemCard({ item, day, isLast, stopNumber }) {
   const { t } = useTranslation()
-  const currency = useTrip((s) => activeTrip(s)?.currency ?? 'USD')
+  const currency = useTrip((s) => activeTrip(s)?.currency ?? 'INR')
   const toggleDone = useTrip((s) => s.toggleDone)
   const removeItem = useTrip((s) => s.removeItem)
   const openEditor = useUI((s) => s.openEditor)

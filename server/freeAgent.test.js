@@ -234,7 +234,8 @@ describe('runFreeAgent multi-day itinerary (8-10 days)', () => {
     expect(dayCalls.length).toBe(10)
 
     const actCalls = calledTools.filter((c) => c.name === 'add_activity')
-    expect(actCalls.length).toBe(10)
+    expect(actCalls.length).toBeGreaterThanOrEqual(30) // At least 3 stops per day across 10 days
+    expect(actCalls.every((c) => c.args.time)).toBe(true)
 
     // First day should mention arrival
     expect(dayCalls[0].args.title).toContain('Day 1')

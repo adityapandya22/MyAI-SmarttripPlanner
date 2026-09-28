@@ -47,7 +47,7 @@ export default function PlacePreviewMarker({ p }) {
               <>
                 {p.price_per_night != null && (
                   <>
-                    {fmtMoney(p.price_per_night, p.currency ?? 'EUR')}
+                    {fmtMoney(p.price_per_night, p.currency ?? 'INR')}
                     {t('hotels.perNight')}
                   </>
                 )}

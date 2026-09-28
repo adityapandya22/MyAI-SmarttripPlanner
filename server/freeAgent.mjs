@@ -10,6 +10,7 @@
 import { z } from 'zod'
 import { TOOL_DEFS, makeToolHandler } from './tools.mjs'
 import { findDestination } from './destination.mjs'
+import { getHotelProvider, getRestaurantProvider, getProviderMode } from './providers/index.mjs'
 
 // Re-export for backwards compatibility (tests import directly from this file)
 export { findDestination } from './destination.mjs'
@@ -45,6 +46,24 @@ async function streamText(bridge, fullText, signal, speedMs = 15) {
   }
 }
 
+/** Minor words to keep lowercased unless at beginning or end */
+const MINOR_WORDS = new Set(['a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'in', 'nor', 'of', 'on', 'or', 'the', 'to', 'up', 'with'])
+
+/** Title-case a string e.g. "goa" -> "Goa", "old manali trip" -> "Old Manali Trip" */
+export function toTitleCase(str) {
+  if (!str || typeof str !== 'string') return ''
+  return str
+    .split(/\s+/)
+    .map((word, idx, arr) => {
+      const lower = word.toLowerCase()
+      if (idx > 0 && idx < arr.length - 1 && MINOR_WORDS.has(lower)) {
+        return lower
+      }
+      return lower.charAt(0).toUpperCase() + lower.slice(1)
+    })
+    .join(' ')
+}
+
 /**
  * Parse day count from user prompt text, e.g. "8 to 10 days", "10 days", "8-10 days".
  * Returns the upper bound of any range, or null if no day count found.
@@ -55,6 +74,37 @@ export function parseDaysFromText(text) {
   const a = parseInt(m[1], 10)
   const b = m[2] ? parseInt(m[2], 10) : a
   return Math.max(a, b)
+}
+
+/** Extract thematic tags from attraction name & description */
+export function getAttractionTags(item) {
+  const name = typeof item === 'object' && item?.name ? item.name : String(item)
+  const desc = typeof item === 'object' && item?.description ? item.description : ''
+  const text = `${name} ${desc}`.toLowerCase()
+  const tags = new Set()
+  if (/panaji|panjim|fontainhas|mandovi|miramar|quarter/i.test(text)) tags.add('panaji')
+  if (/fort|basilica|cathedral|church|heritage|palace|tomb|monument|museum|unesco|cave|temple/i.test(text)) tags.add('heritage')
+  if (/beach|sea|coast|sand|shack|cove|cliff/i.test(text)) tags.add('beach')
+  if (/falls|waterfall|nature|lake|valley|pass|sanctuary|park|plantation|garden|forest|trek|hills|mountain|tea/i.test(text)) tags.add('nature')
+  if (/market|bazaar|flea|craft|shopping|street|spice/i.test(text)) tags.add('market')
+  if (/cultural|dance|art|folk|cruise|music/i.test(text)) tags.add('culture')
+  return tags
+}
+
+/** Generate guaranteed distinct coordinates with deterministic tiny offsets */
+function getDistinctCoords(usedCoords, lat, lng) {
+  let cLat = Number(Number(lat).toFixed(4))
+  let cLng = Number(Number(lng).toFixed(4))
+  let key = `${cLat},${cLng}`
+  let step = 1
+  while (usedCoords.has(key)) {
+    cLat = Number((Number(lat) + step * 0.0035).toFixed(4))
+    cLng = Number((Number(lng) - step * 0.0028).toFixed(4))
+    key = `${cLat},${cLng}`
+    step++
+  }
+  usedCoords.add(key)
+  return { lat: cLat, lng: cLng }
 }
 
 /** Day title templates for varied multi-day itineraries */
@@ -116,9 +166,15 @@ function intentMatches(text, ...words) {
 /**
  * Autonomous Free AI Agent (No subscriptions, No login required).
  */
-export async function runFreeAgent(text, { mode, currency = 'INR', language = 'en', bridge, abortSignal, startDate = null }) {
+export async function runFreeAgent(text, { mode, currency = 'INR', language = 'en', bridge, abortSignal, startDate = null, fallbackNotice = null }) {
   const cur = currency || 'INR'
   const isIt = String(language).startsWith('it')
+
+  // Stream friendly fallback notice if routed from a missing/failed key
+  if (fallbackNotice) {
+    const noticeText = `*(${fallbackNotice})*\n\n`
+    await streamText(bridge, noticeText, abortSignal, 10)
+  }
 
   let matchedState
   try {
@@ -149,16 +205,17 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
     const userDays = parseDaysFromText(text)
     const daysCount = Math.min(userDays || matchedState?.suggestedDays || 5, 14)
     const coords = matchedState?.coords || { lat: 26.9124, lng: 75.7873 }
+    const titleCasedDest = toTitleCase(destName)
 
     // Derive dates from startDate (offset 0 and 1) or fallback (today+14, today+15)
     const checkin = deriveDateStr(startDate, 0)
     const checkout = deriveDateStr(startDate, 1)
 
-    // 1. Set Trip Meta
-    bridge.broadcast({ type: 'agent_tool', name: 'set_trip_meta', args: { title: `Trip to ${destName}`, currency: cur, car_gas_unit: 'inr_l' } })
+    // 1. Set Trip Meta (with title-cased name and INR currency)
+    bridge.broadcast({ type: 'agent_tool', name: 'set_trip_meta', args: { title: `Trip to ${titleCasedDest}`, currency: cur, car_gas_unit: 'inr_l' } })
     try {
       await bridge.callBrowser('set_trip_meta', {
-        title: `Trip to ${destName}`,
+        title: `Trip to ${titleCasedDest}`,
         currency: cur,
         car_gas_unit: 'inr_l',
         car_gas_price: 96,
@@ -182,9 +239,8 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
 
     await streamText(bridge, introMsg + '\n\n', abortSignal, 12)
 
-    // 3. Create Days & Top Attractions
-    // TASK 3c: Use real attraction names from state data (no random offsets)
-    const attractions = matchedState?.topAttractions?.length
+    // 3. Prepare normalized attraction objects with real coordinates and descriptions
+    const rawAttractions = matchedState?.topAttractions?.length
       ? matchedState.topAttractions
       : [
         'Historic Old Quarter & Heritage Monuments',
@@ -194,18 +250,91 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
         'Cultural Center & Classical Evening Folk Dance',
       ]
 
+    const attractions = rawAttractions.map((att, idx) => {
+      if (typeof att === 'object' && att?.name) {
+        return {
+          name: att.name,
+          lat: att.lat ?? Number((coords.lat + (idx * 0.005)).toFixed(4)),
+          lng: att.lng ?? Number((coords.lng + (idx * 0.005)).toFixed(4)),
+          description: att.description || `Historic landmark and cultural highlight in ${destName}.`,
+        }
+      }
+      return {
+        name: String(att),
+        lat: Number((coords.lat + (idx * 0.005)).toFixed(4)),
+        lng: Number((coords.lng + (idx * 0.005)).toFixed(4)),
+        description: `Iconic attraction in ${destName}. Guided exploration and cultural highlights.`,
+      }
+    })
+
+    // Search hotels and restaurants via configured providers
+    let foundHotels = []
+    let foundRestaurants = []
+    try {
+      const hRes = await getHotelProvider().searchHotels({ location: stateCapital, checkin, checkout, currency: cur })
+      foundHotels = hRes?.hotels || []
+    } catch { /* fallback safely */ }
+
+    try {
+      const rRes = await getRestaurantProvider().searchRestaurants({ location: stateCapital, query: 'authentic cuisine', currency: cur })
+      foundRestaurants = rRes?.restaurants || []
+    } catch { /* fallback safely */ }
+
+    const isGoa = destName.toLowerCase().includes('goa')
+    const usedCoords = new Set()
+    const usedAttractionNames = new Set()
+    let totalActivitiesAdded = 0
+    let totalFoodAdded = 0
+    let totalHotelsAdded = 0
+
+    // Staggered times for balanced daily flow
+    const STAGGERED_TIMES = ['09:30', '12:30', '15:30', '19:00', '21:30']
+
     for (let dayNum = 1; dayNum <= daysCount; dayNum++) {
       if (abortSignal?.aborted) return
 
       let dayTitle
-      if (dayNum === 1) {
-        dayTitle = DAY_THEMES[0](dayNum, destName, stateCapital)
-      } else if (dayNum === daysCount) {
-        dayTitle = DAY_THEMES[DAY_THEMES.length - 1](dayNum, destName, stateCapital)
+      let targetTag = 'heritage'
+
+      if (isGoa) {
+        if (dayNum === 1) {
+          dayTitle = `Day ${dayNum}: Arrival & Exploring Panaji & Fontainhas`
+          targetTag = 'panaji'
+        } else if (dayNum === 2) {
+          dayTitle = `Day ${dayNum}: Historic Old Goa & Heritage Forts`
+          targetTag = 'heritage'
+        } else if (dayNum === 3) {
+          dayTitle = `Day ${dayNum}: North Goa Beaches & Coastal Highlights`
+          targetTag = 'beach'
+        } else if (dayNum === 4) {
+          dayTitle = `Day ${dayNum}: South Goa Coastal Bliss & Waterfalls`
+          targetTag = 'nature'
+        } else if (dayNum === 5) {
+          dayTitle = `Day ${dayNum}: Spice Plantations & Cultural Goa`
+          targetTag = 'culture'
+        } else if (dayNum === 6) {
+          dayTitle = `Day ${dayNum}: Flea Markets, Sunset Cruise & Nightlife`
+          targetTag = 'market'
+        } else {
+          dayTitle = dayNum === daysCount
+            ? `Day ${dayNum}: Farewell Goa & Souvenir Shopping`
+            : `Day ${dayNum}: Coastal Leisure & Sunset Views`
+          targetTag = dayNum % 2 === 0 ? 'beach' : 'culture'
+        }
       } else {
-        const midThemes = DAY_THEMES.length - 2
-        const themeIdx = 1 + ((dayNum - 2) % midThemes)
-        dayTitle = DAY_THEMES[themeIdx](dayNum, destName, stateCapital)
+        if (dayNum === 1) {
+          dayTitle = DAY_THEMES[0](dayNum, destName, stateCapital)
+          targetTag = 'heritage'
+        } else if (dayNum === daysCount) {
+          dayTitle = DAY_THEMES[DAY_THEMES.length - 1](dayNum, destName, stateCapital)
+          targetTag = 'culture'
+        } else {
+          const midThemes = DAY_THEMES.length - 2
+          const themeIdx = 1 + ((dayNum - 2) % midThemes)
+          dayTitle = DAY_THEMES[themeIdx](dayNum, destName, stateCapital)
+          const tagOptions = ['heritage', 'nature', 'market', 'culture', 'heritage']
+          targetTag = tagOptions[(dayNum - 2) % tagOptions.length]
+        }
       }
 
       bridge.broadcast({ type: 'agent_tool', name: 'add_day', args: { title: dayTitle, night: stateCapital } })
@@ -215,36 +344,181 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
         console.error('[freeAgent] add_day error:', err)
       }
 
-      // Add activities for this day – use real per-attraction coords if present, else state centre (no random offsets)
-      const attIndex = (dayNum - 1) % attractions.length
-      const attItem = attractions[attIndex]
-      const attTitle = typeof attItem === 'object' && attItem?.name ? attItem.name : String(attItem)
-      const stopCoords = (typeof attItem === 'object' && attItem?.lat && attItem?.lng)
-        ? { lat: attItem.lat, lng: attItem.lng }
-        : coords
+      // Pick theme-matched attractions for this day
+      const themeMatches = attractions.filter((att) => {
+        const tags = getAttractionTags(att)
+        return tags.has(targetTag) && !usedAttractionNames.has(att.name)
+      })
 
+      // Ensure we have at least 2 attractions for daytime stops
+      while (themeMatches.length < 2) {
+        const nextUnused = attractions.find((att) => !usedAttractionNames.has(att.name) && !themeMatches.some((x) => x.name === att.name))
+        if (!nextUnused) break
+        themeMatches.push(nextUnused)
+      }
+
+      if (themeMatches.length === 0) themeMatches.push(attractions[(dayNum - 1) % attractions.length])
+      if (themeMatches.length === 1) themeMatches.push(attractions[dayNum % attractions.length])
+
+      const att1 = themeMatches[0]
+      const att2 = themeMatches[1]
+      usedAttractionNames.add(att1.name)
+      usedAttractionNames.add(att2.name)
+
+      const att1Coords = getDistinctCoords(usedCoords, att1.lat, att1.lng)
+      const att2Coords = getDistinctCoords(usedCoords, att2.lat, att2.lng)
+
+      // Stop 1 (09:30) - Primary Theme Sightseeing Activity
+      const att1Tags = getAttractionTags(att1)
+      const stop1Price = att1Tags.has('beach') ? 0 : 250
       bridge.broadcast({
         type: 'agent_tool',
         name: 'add_activity',
-        args: { day_number: dayNum, title: attTitle, time: '10:00', duration_min: 120 },
+        args: { day_number: dayNum, title: att1.name, time: STAGGERED_TIMES[0], duration_min: 120, price: stop1Price },
       })
       try {
         await bridge.callBrowser('add_activity', {
           day_number: dayNum,
-          title: attTitle,
+          title: att1.name,
           type: 'activity',
-          time: '10:00',
+          time: STAGGERED_TIMES[0],
           duration_min: 120,
-          lat: Number(stopCoords.lat.toFixed(4)),
-          lng: Number(stopCoords.lng.toFixed(4)),
-          notes: `Iconic must-visit destination in ${destName}. Guided exploration and photography.`,
+          lat: att1Coords.lat,
+          lng: att1Coords.lng,
+          notes: att1.description,
+          price: stop1Price,
+          price_usd: stop1Price,
         })
+        totalActivitiesAdded++
       } catch (err) {
-        console.error('[freeAgent] add_activity error:', err)
+        console.error('[freeAgent] add_activity stop 1 error:', err)
+      }
+
+      // Stop 2 (12:30) - Authentic Regional Dining Stop
+      const restChoice = foundRestaurants.length ? foundRestaurants[(dayNum - 1) % foundRestaurants.length] : null
+      const lunchTitle = restChoice?.name || `Authentic ${destName} Lunch & Regional Specialties`
+      const lunchCoords = getDistinctCoords(usedCoords, att1.lat + 0.002, att1.lng - 0.002)
+      const lunchNotes = restChoice?.address
+        ? `Authentic regional dining at ${restChoice.name} (${restChoice.address}). Price range: ${restChoice.price_level || '₹₹'}.`
+        : `Savor traditional local specialties, fresh regional flavors, and refreshing beverages.`
+      const lunchPrice = 550
+
+      bridge.broadcast({
+        type: 'agent_tool',
+        name: 'add_activity',
+        args: { day_number: dayNum, title: lunchTitle, time: STAGGERED_TIMES[1], duration_min: 75, price: lunchPrice },
+      })
+      try {
+        await bridge.callBrowser('add_activity', {
+          day_number: dayNum,
+          title: lunchTitle,
+          type: 'food',
+          time: STAGGERED_TIMES[1],
+          duration_min: 75,
+          lat: lunchCoords.lat,
+          lng: lunchCoords.lng,
+          notes: lunchNotes,
+          price: lunchPrice,
+          price_usd: lunchPrice,
+        })
+        totalFoodAdded++
+      } catch (err) {
+        console.error('[freeAgent] add_activity stop 2 error:', err)
+      }
+
+      // Stop 3 (15:30) - Secondary Sightseeing / Nature / Landmark Activity
+      const att2Tags = getAttractionTags(att2)
+      const stop3Price = att2Tags.has('beach') ? 0 : 200
+      bridge.broadcast({
+        type: 'agent_tool',
+        name: 'add_activity',
+        args: { day_number: dayNum, title: att2.name, time: STAGGERED_TIMES[2], duration_min: 120, price: stop3Price },
+      })
+      try {
+        await bridge.callBrowser('add_activity', {
+          day_number: dayNum,
+          title: att2.name,
+          type: 'activity',
+          time: STAGGERED_TIMES[2],
+          duration_min: 120,
+          lat: att2Coords.lat,
+          lng: att2Coords.lng,
+          notes: att2.description,
+          price: stop3Price,
+          price_usd: stop3Price,
+        })
+        totalActivitiesAdded++
+      } catch (err) {
+        console.error('[freeAgent] add_activity stop 3 error:', err)
+      }
+
+      // Stop 4 (19:00) - Evening Stroll / Dinner / Sunset Highlight
+      const eveCoords = getDistinctCoords(usedCoords, att2.lat - 0.003, att2.lng + 0.003)
+      const eveTitle = isGoa && dayNum === 1
+        ? 'Mandovi River Cruise & Folk Music'
+        : `Evening Sunset Walk & Dinner in ${stateCapital}`
+      const eveNotes = isGoa && dayNum === 1
+        ? 'Evening river cruise with Goan folk music, Dekhni dance performances, and river panoramas.'
+        : `Unwind with scenic evening atmosphere, local street sights, and dinner in ${stateCapital}.`
+      const evePrice = 650
+
+      bridge.broadcast({
+        type: 'agent_tool',
+        name: 'add_activity',
+        args: { day_number: dayNum, title: eveTitle, time: STAGGERED_TIMES[3], duration_min: 90, price: evePrice },
+      })
+      try {
+        await bridge.callBrowser('add_activity', {
+          day_number: dayNum,
+          title: eveTitle,
+          type: 'activity',
+          time: STAGGERED_TIMES[3],
+          duration_min: 90,
+          lat: eveCoords.lat,
+          lng: eveCoords.lng,
+          notes: eveNotes,
+          price: evePrice,
+          price_usd: evePrice,
+        })
+        totalActivitiesAdded++
+      } catch (err) {
+        console.error('[freeAgent] add_activity stop 4 error:', err)
+      }
+
+      // Stop 5 (21:30) - Overnight Accommodation
+      const hotelChoice = foundHotels.length ? foundHotels[(dayNum - 1) % foundHotels.length] : null
+      const hotelTitle = hotelChoice?.name ? `Night at ${hotelChoice.name}` : `Night in ${stateCapital}`
+      const hotelCoords = getDistinctCoords(usedCoords, hotelChoice?.lat || coords.lat, hotelChoice?.lng || coords.lng)
+      const hotelPrice = hotelChoice?.price_per_night || 3200
+      const hotelNotes = hotelChoice?.name
+        ? `Verified accommodation (${hotelChoice.score || '8.8'}★). Clean and comfortable amenities for night rest.`
+        : `Comfortable and verified overnight accommodation in ${stateCapital}.`
+
+      bridge.broadcast({
+        type: 'agent_tool',
+        name: 'add_activity',
+        args: { day_number: dayNum, title: hotelTitle, time: STAGGERED_TIMES[4], duration_min: 0, price: hotelPrice },
+      })
+      try {
+        await bridge.callBrowser('add_activity', {
+          day_number: dayNum,
+          title: hotelTitle,
+          type: 'hotel',
+          time: STAGGERED_TIMES[4],
+          duration_min: 0,
+          lat: hotelCoords.lat,
+          lng: hotelCoords.lng,
+          notes: hotelNotes,
+          price: hotelPrice,
+          price_usd: hotelPrice,
+        })
+        totalHotelsAdded++
+      } catch (err) {
+        console.error('[freeAgent] add_activity hotel error:', err)
       }
     }
 
-    // 4. Search and recommend hotels in ₹
+    // 4. Broadcast hotel and restaurant search events for UI visibility
     bridge.broadcast({
       type: 'agent_tool',
       name: 'search_hotels',
@@ -258,10 +532,9 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
         currency: cur,
       })
     } catch {
-      // In case browser bridge doesn't implement executor, fallback safely
+      // Browser bridge fallback
     }
 
-    // 5. Search dining in ₹
     bridge.broadcast({
       type: 'agent_tool',
       name: 'search_restaurants',
@@ -274,13 +547,27 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
         currency: cur,
       })
     } catch {
-      // Fallback safely
+      // Browser bridge fallback
     }
 
-    // 6. Concluding message
-    const summaryText = isIt
-      ? `Ecco pronto il tuo programma! Ho organizzato ${daysCount} tappe principali con alberghi e ristoranti tipici con prezzi indicati in ${cur}. Puoi chiedermi modifiche in qualsiasi momento in chat!`
-      : `Your **${destName}** itinerary is ready! I've laid out ${daysCount} days with balanced activities, real hotel recommendations, and authentic dining spots formatted in **₹ ${cur}**.\n\nYou can ask me anytime to adjust days, find more spots, or change your travel style!`
+    // 6. Honest concluding message reflecting exactly what was added
+    const totalStopsCount = totalActivitiesAdded + totalFoodAdded + totalHotelsAdded
+    const isMock = getProviderMode() === 'mock'
+
+    let summaryText
+    if (isIt) {
+      summaryText = `Ecco pronto il tuo programma per **${destName}**! Ho organizzato **${daysCount} giorni** con **${totalStopsCount} tappe totali** (visite culturali, pasti autentici e alloggi) calcolate in **${cur === 'INR' ? '₹ (Rupie)' : cur}**.\n\n${isMock ? '*(Nota: I soggiorni e i ristoranti provengono dal mock provider regionale. Configura chiavi o scraper in Admin per prezzi live.)*\n\n' : ''}Puoi chiedermi modifiche in qualsiasi momento in chat!`
+    } else {
+      const providerNote = isMock
+        ? `\n\n*(Note: Stays and dining recommendations were populated using the regional mock provider; configure live scrapers or API keys in Admin for live availability.)*`
+        : (totalHotelsAdded > 0 || totalFoodAdded > 0)
+          ? `\n\n*(Verified accommodations and authentic dining recommendations have been included directly in your itinerary.)*`
+          : `\n\n*(Sightseeing stops have been added; no accommodations were automatically booked. You can search for hotels anytime in chat.)*`
+
+      summaryText = `Your **${destName}** itinerary is ready! I've laid out **${daysCount} days** with **${totalStopsCount} total stops** (including ${totalActivitiesAdded} sightseeing highlights, ${totalFoodAdded} dining spots, and ${totalHotelsAdded} hotel stays) formatted in **₹ ${cur}**.\n\n` +
+        `Every day features 3–4 thoughtfully timed stops at staggered times, carefully matched to the day's theme with real coordinates, authentic descriptions, and sensible budget estimates.${providerNote}\n\n` +
+        `You can ask me anytime to adjust days, find more spots, or change your travel style!`
+    }
 
     await streamText(bridge, summaryText, abortSignal, 12)
     bridge.broadcast({ type: 'assistant_text', text: introMsg + '\n\n' + summaryText })

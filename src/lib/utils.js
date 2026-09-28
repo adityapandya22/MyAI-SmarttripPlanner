@@ -51,6 +51,22 @@ export function gmapsUrl(lat, lng) {
   return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
 }
 
+const MINOR_WORDS = new Set(['a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'in', 'nor', 'of', 'on', 'or', 'the', 'to', 'up', 'with'])
+
+export function toTitleCase(str) {
+  if (!str || typeof str !== 'string') return ''
+  return str
+    .split(/\s+/)
+    .map((word, idx, arr) => {
+      const lower = word.toLowerCase()
+      if (idx > 0 && idx < arr.length - 1 && MINOR_WORDS.has(lower)) {
+        return lower
+      }
+      return lower.charAt(0).toUpperCase() + lower.slice(1)
+    })
+    .join(' ')
+}
+
 export function fmtMoney(v, currency = 'INR') {
   const locale = currency === 'INR' ? 'en-IN' : intlLocale()
   return new Intl.NumberFormat(locale, {
@@ -123,8 +139,7 @@ export function normalizeTrip(raw) {
   t.brief ||= ''
   t.notes ||= ''
   t.transport = ['car', 'walk', 'transit', 'mixed'].includes(t.transport) ? t.transport : 'car'
-  /* interview trips choose their currency before the first message */
-  t.currency = ['INR', 'EUR', 'USD'].includes(t.currency) ? t.currency : t.phase === 'interview' ? null : 'INR'
+  t.currency = ['INR', 'EUR', 'USD'].includes(t.currency) ? t.currency : 'INR'
   /* map anchor for the chosen destination (set at start_planning, before any stop exists) */
   t.center = typeof t.center?.lat === 'number' && typeof t.center?.lng === 'number'
     ? { lat: t.center.lat, lng: t.center.lng } : null

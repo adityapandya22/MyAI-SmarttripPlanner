@@ -46,7 +46,7 @@ export default function Header() {
     (s, l) => s + (roadKmByDay[l.dayId] ?? estimateDayKm(l.coords)), 0)
   const usesCar = tripUsesCar(trip)
   const costs = costByType(trip)
-  const currency = trip.currency ?? 'USD'
+  const currency = trip.currency ?? 'INR'
   const fuelUsd = usesCar ? fuelCost(totalKm, trip.car, currency) : 0
   const totalUsd = costs.items + fuelUsd
 

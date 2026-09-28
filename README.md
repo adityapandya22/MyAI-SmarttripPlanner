@@ -169,11 +169,31 @@ A **Claude subscription** (Pro/Max) and/or a **ChatGPT subscription** (Plus) —
 
 | Variable | Default | Description |
 |---|---|---|
+| `VITE_MAP_TILE_URL` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | Map tile layer URL (OpenStreetMap by default, free and no key required). |
+| `VITE_MAP_TILE_ATTRIBUTION` | `&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors` | Attribution text for map tiles. |
+| `GEMINI_API_KEY` | - | Optional Google Gemini API key for smart AI planning. |
+| `GROQ_API_KEY` | - | Optional Groq API key for smart AI planning. |
 | `ULISSE_PLACES_PROVIDER` | `live` | Accommodation and restaurant search provider: `live` (scrapes Booking.com and Google Maps via headless Chrome) or `mock` (returns instant realistic fake data for demos, offline development, and tests without requiring a browser or network). |
 | `ULISSE_DATA_DIR` | `~/Documents/Ulisse` | Overrides the local data folder for trips, images, chats, and auth token. |
 | `ULISSE_CHROME` | Auto-detected | Custom path to a Chrome or Edge executable if not in standard locations. |
 | `AGENT_PORT` | `5200` | Port for the agent server (WebSocket and MCP over HTTP). |
 | `VITE_AGENT_PORT` | `5200` | Port the web app connects to for the agent server. |
+
+### Map tiles
+
+By default, MyTripPlanner uses free OpenStreetMap tiles (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`) with no API key or watermark required.
+If you prefer commercial map styles (e.g. CARTO Voyager, Stadia Maps, MapTiler):
+1. Copy `.env.example` to `.env`
+2. Set `VITE_MAP_TILE_URL` with your tile URL and API key token
+3. Set `VITE_MAP_TILE_ATTRIBUTION` with the corresponding provider attribution
+
+### Optional: smarter AI
+
+The autonomous Free Agent works out of the box with zero subscriptions, zero logins, and zero API keys.
+For enhanced planning with LLMs:
+- **Google Gemini / Groq**: Add `GEMINI_API_KEY` or `GROQ_API_KEY` in your `.env` or input it via the Admin settings panel.
+- **Claude / ChatGPT**: Connect via Claude Pro/Max or ChatGPT Plus CLI sign-in.
+If any API key is missing or invalid, the app gracefully falls back to the Free AI Agent with a clear notification in chat. Never commit API keys to version control.
 
 ## Project structure
 

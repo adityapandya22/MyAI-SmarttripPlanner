@@ -4,6 +4,7 @@ import { ListChecks, CalendarRange, Sparkles, Bot } from 'lucide-react'
 import { useUI, useTrip, useRoutes, activeTrip } from './store'
 import { connectAgent, useAgentChat } from './agent/socket'
 import { startStorageSync } from './lib/storageSync'
+import { toTitleCase } from './lib/utils'
 import { useIsDesktop, useVisualViewport } from './lib/useViewport'
 import BottomSheet from './components/mobile/BottomSheet'
 import SheetHeader from './components/mobile/SheetHeader'
@@ -56,7 +57,8 @@ export default function App() {
   useEffect(() => { connectAgent(); if (import.meta.env.VITE_DEMO !== '1') startStorageSync() }, [])
 
   useEffect(() => {
-    document.title = activeId && tripTitle ? `${tripTitle} — ${APP_NAME}` : APP_NAME
+    const displayTitle = tripTitle ? toTitleCase(tripTitle) : ''
+    document.title = activeId && displayTitle ? `${displayTitle} — ${APP_NAME}` : APP_NAME
   }, [activeId, tripTitle])
 
   /* mobile shell: bottom sheet over an always-visible map */

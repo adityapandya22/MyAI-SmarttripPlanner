@@ -5,7 +5,7 @@ import {
   ShieldCheck, Sparkles,
 } from 'lucide-react'
 import { useTrip, useUI, toast } from '../store'
-import { tripStats, fmtDur, dayDate, fmtDate, fmtKm, fmtMoney, costByType, fuelCost } from '../lib/utils'
+import { tripStats, fmtDur, dayDate, fmtDate, fmtKm, fmtMoney, costByType, fuelCost, toTitleCase } from '../lib/utils'
 import { chainedDayCoords, estimateDayKm } from '../lib/geo'
 import { internTripImages } from '../lib/imgdb'
 import { useItemImages } from './ItemImage'
@@ -48,7 +48,8 @@ export default function Dashboard() {
   const handleConsumerQuickPlan = (prompt) => {
     const query = (prompt || consumerPrompt).trim()
     if (!query) return
-    const title = query.length > 35 ? query.slice(0, 35) + '…' : query
+    const rawTitle = query.length > 35 ? query.slice(0, 35) + '…' : query
+    const title = toTitleCase(rawTitle)
     createTrip(title, 'interview')
     setTimeout(() => {
       useAgentChat.getState().send(query)
@@ -323,7 +324,7 @@ function TripCard({ trip, onOpen, onDuplicate, onDelete }) {
   const d0 = dayDate(trip.startDate, 0)
   const dN = dayDate(trip.startDate, trip.days.length - 1)
   const km = chainedDayCoords(trip).reduce((s, l) => s + estimateDayKm(l.coords), 0)
-  const budget = costByType(trip).items + fuelCost(km, trip.car, trip.currency ?? 'USD')
+  const budget = costByType(trip).items + fuelCost(km, trip.car, trip.currency ?? 'INR')
 
   /* cover: first located, non-drive stop */
   const cover = trip.days.flatMap((d) => d.items).find((i) => i.lat != null && i.type !== 'drive')
@@ -362,7 +363,7 @@ function TripCard({ trip, onOpen, onDuplicate, onDelete }) {
           <span className="inline-flex items-center gap-1"><MapPin size={12} className="text-brand-500" /> {t('dashboard.stops', { count: stats.stops })}</span>
           {stats.driveMin > 0 && <span className="inline-flex items-center gap-1"><CarFront size={12} className="text-brand-500" /> {fmtDur(stats.driveMin)}</span>}
           {km > 50 && <span className="inline-flex items-center gap-1"><Route size={12} className="text-brand-500" /> ~{fmtKm(km)}</span>}
-          {budget > 0 && <span className="inline-flex items-center gap-1 text-emerald-700"><Wallet size={12} /> ~{fmtMoney(budget, trip.currency ?? 'USD')}</span>}
+          {budget > 0 && <span className="inline-flex items-center gap-1 text-emerald-700"><Wallet size={12} /> ~{fmtMoney(budget, trip.currency ?? 'INR')}</span>}
         </div>
       </div>
     </article>

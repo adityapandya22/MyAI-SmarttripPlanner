@@ -67,7 +67,7 @@ const flash = (itemId, color) => useUI.getState().setFocusItem(itemId, color)
 const fmtVal = (field, v) => {
   if (v == null || v === '') return '—'
   if (field === 'dur') return i18n.t('units.durMin', { m: v })
-  if (field === 'price') return fmtMoney(v, activeTrip(useTrip.getState())?.currency ?? 'USD')
+  if (field === 'price') return fmtMoney(v, activeTrip(useTrip.getState())?.currency ?? 'INR')
   if (field === 'must' || field === 'done') return v ? i18n.t('common.yes') : i18n.t('common.no')
   if (field === 'links') return i18n.t('fields.linkCount', { count: v.length })
   if (typeof v === 'number') return String(Math.round(v * 1000) / 1000)
@@ -95,7 +95,8 @@ const toPatch = (a) => {
   if (a.transport_mode !== undefined) p.mode = a.transport_mode
   if (a.time !== undefined) p.time = a.time
   if (a.duration_min !== undefined) p.dur = a.duration_min
-  if (a.price_usd !== undefined) p.price = a.price_usd
+  if (a.price !== undefined) p.price = a.price
+  else if (a.price_usd !== undefined) p.price = a.price_usd
   if (a.notes !== undefined) p.notes = a.notes
   if (a.links !== undefined) p.links = a.links
   if (a.must_see !== undefined) p.must = a.must_see
@@ -135,9 +136,9 @@ const EXECUTORS = {
       transport: t.transport,
       brief: t.brief || undefined,
       notes: t.notes || undefined,
-      currency: t.currency ?? 'USD',
+      currency: t.currency ?? 'INR',
       car: { model: t.car.model || undefined, l_per_100km: t.car.lPer100, gas_price: t.car.gasPrice, gas_unit: t.car.gasUnit },
-      budget: { ...costs, fuel: Math.round(fuelCost(km, t.car, t.currency ?? 'USD')), total: Math.round(costs.items + fuelCost(km, t.car, t.currency ?? 'USD')) },
+      budget: { ...costs, fuel: Math.round(fuelCost(km, t.car, t.currency ?? 'INR')), total: Math.round(costs.items + fuelCost(km, t.car, t.currency ?? 'INR')) },
       total_km: Math.round(km),
       days: t.days
         .map((d, i) => ({
@@ -170,7 +171,7 @@ const EXECUTORS = {
       imgs: [],
       noWiki: false,
       sug: null,
-      price: a.price_usd ?? 0,
+      price: a.price ?? a.price_usd ?? 0,
       mode: (a.type ?? 'activity') === 'drive' ? (a.transport_mode ?? 'car') : null,
     }
     let dayId, index

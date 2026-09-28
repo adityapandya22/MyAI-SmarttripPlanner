@@ -13,7 +13,7 @@ import Modal from './Modal'
 /* Read-only detail card: big photo carousel + all the item's info */
 export default function ItemDetail() {
   const { t } = useTranslation()
-  const currency = useTrip((s) => activeTrip(s)?.currency ?? 'USD')
+  const currency = useTrip((s) => activeTrip(s)?.currency ?? 'INR')
   const detail = useUI((s) => s.detail)
   const closeDetail = useUI((s) => s.closeDetail)
   const openEditor = useUI((s) => s.openEditor)

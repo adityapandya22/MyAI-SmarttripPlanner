@@ -307,6 +307,8 @@ export function createAgent(bridge, { mcpPort, auth }) {
     try { return JSON.parse(a) } catch { return {} }
   }
 
+export const FREE_FALLBACK_NOTICE = 'Using the free planner; add an API key in Admin for smarter plans'
+
   /* ---------- dispatch ---------- */
   async function runTurn(msg) {
     if (active) { bridge.broadcast({ type: 'agent_error', error: 'Un turno è già in corso.' }); return }
@@ -321,7 +323,7 @@ export function createAgent(bridge, { mcpPort, auth }) {
         active = { abort: () => abort.abort() }
         const apiKey = msg.apiKey || auth?.getGeminiKey?.() || process.env.GEMINI_API_KEY
         if (!apiKey) {
-          await runFreeAgent(msg.text, { ...msg, bridge, abortSignal: abort.signal })
+          await runFreeAgent(msg.text, { ...msg, fallbackNotice: FREE_FALLBACK_NOTICE, bridge, abortSignal: abort.signal })
         } else {
           await runOpenAiCompat(msg.text, {
             ...msg,
@@ -337,7 +339,7 @@ export function createAgent(bridge, { mcpPort, auth }) {
         active = { abort: () => abort.abort() }
         const apiKey = msg.apiKey || auth?.getGroqKey?.() || process.env.GROQ_API_KEY
         if (!apiKey) {
-          await runFreeAgent(msg.text, { ...msg, bridge, abortSignal: abort.signal })
+          await runFreeAgent(msg.text, { ...msg, fallbackNotice: FREE_FALLBACK_NOTICE, bridge, abortSignal: abort.signal })
         } else {
           await runOpenAiCompat(msg.text, {
             ...msg,
@@ -363,7 +365,7 @@ export function createAgent(bridge, { mcpPort, auth }) {
       try {
         const abort = new AbortController()
         active = { abort: () => abort.abort() }
-        await runFreeAgent(msg.text, { ...msg, bridge, abortSignal: abort.signal })
+        await runFreeAgent(msg.text, { ...msg, fallbackNotice: FREE_FALLBACK_NOTICE, bridge, abortSignal: abort.signal })
       } catch (fallbackErr) {
         bridge.broadcast({
           type: 'agent_error',
