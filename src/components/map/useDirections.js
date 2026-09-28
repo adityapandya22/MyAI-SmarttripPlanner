@@ -60,7 +60,16 @@ export function useDirections({ trip, days, insertItemAt, mapRef, t }) {
 
   const selectPlace = (p, narrow, setExpanded) => {
     setPlace(p)
-    mapRef.current?.flyTo([p.lat, p.lng], Math.max(mapRef.current.getZoom(), 13), { duration: 0.8 })
+    if (p?.boundingbox && Array.isArray(p.boundingbox) && p.boundingbox.length === 4) {
+      const [s, n, w, e] = p.boundingbox.map(Number)
+      if (!isNaN(s) && !isNaN(n) && !isNaN(w) && !isNaN(e) && (Math.abs(n - s) > 0.05 || Math.abs(e - w) > 0.05)) {
+        mapRef.current?.fitBounds([[s, w], [n, e]], { padding: [40, 40], maxZoom: 14 })
+      } else {
+        mapRef.current?.flyTo([p.lat, p.lng], Math.max(mapRef.current?.getZoom() || 13, 13), { duration: 0.8 })
+      }
+    } else {
+      mapRef.current?.flyTo([p.lat, p.lng], Math.max(mapRef.current?.getZoom() || 13, 13), { duration: 0.8 })
+    }
     if (narrow) setExpanded(false)
   }
 

@@ -215,9 +215,13 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
         console.error('[freeAgent] add_day error:', err)
       }
 
-      // Add activities for this day – use state centre (no random offsets)
+      // Add activities for this day – use real per-attraction coords if present, else state centre (no random offsets)
       const attIndex = (dayNum - 1) % attractions.length
-      const attTitle = attractions[attIndex]
+      const attItem = attractions[attIndex]
+      const attTitle = typeof attItem === 'object' && attItem?.name ? attItem.name : String(attItem)
+      const stopCoords = (typeof attItem === 'object' && attItem?.lat && attItem?.lng)
+        ? { lat: attItem.lat, lng: attItem.lng }
+        : coords
 
       bridge.broadcast({
         type: 'agent_tool',
@@ -231,8 +235,8 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
           type: 'activity',
           time: '10:00',
           duration_min: 120,
-          lat: Number(coords.lat.toFixed(4)),
-          lng: Number(coords.lng.toFixed(4)),
+          lat: Number(stopCoords.lat.toFixed(4)),
+          lng: Number(stopCoords.lng.toFixed(4)),
           notes: `Iconic must-visit destination in ${destName}. Guided exploration and photography.`,
         })
       } catch (err) {
