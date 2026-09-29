@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation, Trans } from 'react-i18next'
 import {
   Send, Square, ChevronLeft, ChevronRight, TriangleAlert, NotebookPen, X,
-  Landmark, Mountain, Train, Sun, Sparkles, ShieldCheck,
+  Landmark, Mountain, Train, Sun, Sparkles, ShieldCheck, RefreshCw,
 } from 'lucide-react'
 import { useAgentChat } from '../agent/socket'
 import { useTrip, activeTrip } from '../store'
@@ -21,8 +21,13 @@ const DEMO = import.meta.env.VITE_DEMO === '1'
 export default function InterviewView() {
   const { t, i18n } = useTranslation()
   const {
+<<<<<<< HEAD
     connected, connectionState, thinking, messages, streamText, pendingQuestion,
     send, stop, retryConnection,
+=======
+    connected, connecting, retry, thinking, messages, streamText, pendingQuestion,
+    send, stop, connectionError, providerStatus, engine,
+>>>>>>> 8693e58 (Consumer bridge mode, provider status, model config, destination aliases)
   } = useAgentChat()
   const closeTrip = useTrip((s) => s.closeTrip)
   const setPhase = useTrip((s) => s.setPhase)
@@ -169,10 +174,15 @@ export default function InterviewView() {
             <div className={`z-10 pb-[env(safe-area-inset-bottom)] pt-3 ${empty ? '' : 'sticky bottom-0'}`}>
               <Composer
                 text={text} setText={setText} submit={submit} stop={stop}
+<<<<<<< HEAD
                 connected={connected} connectionState={connectionState} retryConnection={retryConnection}
+=======
+                connected={connected} connecting={connecting} retry={retry}
+>>>>>>> 8693e58 (Consumer bridge mode, provider status, model config, destination aliases)
                 thinking={thinking} pendingQuestion={pendingQuestion}
                 needCurrency={needCurrency} currency={currency} setCurrency={setCurrency}
                 currencyNudge={currencyNudge} demoLocked={DEMO && empty}
+                connectionError={connectionError} providerStatus={providerStatus} engine={engine}
               />
               <p className="pb-2 pt-2 text-center text-[11px] text-ink-400">
                 {t('interview.footerHint')}
@@ -253,8 +263,13 @@ function IdeaCards({ onPick }) {
    demoLocked = demo build, first message: the prompt is pre-written and the
    only interaction is hitting send. */
 function Composer({
+<<<<<<< HEAD
   text, setText, submit, stop, connected, connectionState, retryConnection, thinking, pendingQuestion,
+=======
+  text, setText, submit, stop, connected, connecting, retry, thinking, pendingQuestion,
+>>>>>>> 8693e58 (Consumer bridge mode, provider status, model config, destination aliases)
   needCurrency, currency, setCurrency, currencyNudge, demoLocked,
+  connectionError, providerStatus, engine,
 }) {
   const { t } = useTranslation()
   const taRef = useRef(null)
@@ -268,6 +283,7 @@ function Composer({
 
   const placeholderText = pendingQuestion
     ? t('interview.placeholderAnswer')
+<<<<<<< HEAD
     : connectionState === 'connecting'
       ? (t('interview.placeholderConnecting') || 'Connecting to Ulisse…')
       : !connected
@@ -297,6 +313,46 @@ function Composer({
               {t('interview.retry') || 'Retry'}
             </button>
           )}
+=======
+    : connecting
+    ? t('interview.placeholderConnecting')
+    : !connected
+    ? t('interview.placeholderOffline')
+    : needCurrency
+    ? t('interview.placeholderCurrency')
+    : t('interview.placeholder')
+
+  const unreadyProvider = connected && providerStatus && engine !== 'free' && !providerStatus[engine]?.ready
+    ? providerStatus[engine]
+    : null
+
+  return (
+    <div className="rounded-2xl border border-ink-200 bg-white p-2 shadow-lg">
+      {!connected && !connecting && (
+        <div className="mb-2 flex items-center justify-between rounded-lg bg-rose-50 px-2.5 py-1 text-xs text-rose-700">
+          <span className="font-medium">{connectionError ? `${t('interview.offlineHint')} (${connectionError})` : t('interview.offlineHint')}</span>
+          <button
+            type="button"
+            onClick={retry}
+            className="inline-flex items-center gap-1 rounded bg-white px-2 py-0.5 text-[11px] font-bold text-rose-700 shadow-xs border border-rose-200 hover:bg-rose-100 transition active:scale-95"
+          >
+            <RefreshCw size={11} />
+            <span>{t('interview.retry')}</span>
+          </button>
+        </div>
+      )}
+      {unreadyProvider && (
+        <div className="mb-2 flex items-center justify-between rounded-lg bg-amber-50 px-2.5 py-1 text-xs text-amber-800 border border-amber-200">
+          <span className="font-medium">{unreadyProvider.message}</span>
+          <button
+            type="button"
+            onClick={retry}
+            className="inline-flex items-center gap-1 rounded bg-white px-2 py-0.5 text-[11px] font-bold text-amber-800 shadow-xs border border-amber-300 hover:bg-amber-100 transition active:scale-95"
+          >
+            <RefreshCw size={11} />
+            <span>{t('interview.retry')}</span>
+          </button>
+>>>>>>> 8693e58 (Consumer bridge mode, provider status, model config, destination aliases)
         </div>
       )}
       <div className="flex items-end gap-2">

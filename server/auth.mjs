@@ -8,7 +8,7 @@
              the UI, and the captured long-lived token is stored for the SDK. */
 
 import { spawn } from 'node:child_process'
-import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
@@ -21,10 +21,9 @@ let getDataAuthPath = () => null
 const authFile = () =>
   process.env.AUTH_FILE || getDataAuthPath?.() || join(__dirname, '.auth.json')
 
-/* prefer the project-pinned Claude Code CLI over whatever is on PATH,
-   so a fresh clone works with just `npm install` */
-const LOCAL_CLAUDE = join(__dirname, '..', 'node_modules', '.bin', 'claude')
-const CLAUDE_BIN = process.env.CLAUDE_BIN || (existsSync(LOCAL_CLAUDE) ? LOCAL_CLAUDE : 'claude')
+import { resolveBinary } from './providers/status.mjs'
+
+const CLAUDE_BIN = process.env.CLAUDE_BIN || resolveBinary('claude')
 
 /* `script` lends the CLI a pty, but BSD (macOS) and util-linux (Linux)
    disagree on the syntax */
@@ -72,7 +71,10 @@ export function createAuth(bridge, { codexBin, getAuthPath }) {
   function startCodex() {
     let child
     try {
-      child = spawn(codexBin, ['login'], { stdio: ['ignore', 'pipe', 'pipe'] })
+      child = spawn(codexBin, ['login'], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        ...(process.platform === 'win32' ? { shell: true } : {}),
+      })
     } catch {
       send({ engine: 'codex', phase: 'error', error: 'Codex CLI non trovato (npm install).' })
       return

@@ -1,0 +1,41 @@
+Bug: The app's frontend runs at http://localhost:5199. On the "Where are we going?" screen, the chat shows a red "Ulisse is offline" banner with a Retry button, the input is disabled ("Ulisse not connected"), and Retry doesn't help.
+
+Evidence:
+1. The `npm run dev` terminal repeatedly prints:
+   "[agent] [bridge] Rejected connection from unauthorized origin: http://localhost:5199"
+   The WebSocket bridge rejects the browser because its origin allowlist (server/auth/policy.mjs and the bridge server code) doesn't include port 5199.
+2. The provider dropdown lists "Claude (Pro/Max subscription): Sonnet, Opus, Haiku" and "ChatGPT (Plus subscription, Codex): GPT-5.5, GPT-5.4, GPT-5.4 Mini", with GPT-5.4 selected. The header says "Consumer Mode · No Key Needed". The app appears to use subscription logins through local CLIs (Claude Code / Codex), not API keys.
+
+Fix everything end to end, in this order:
+
+A. Origin allowlist (confirmed root cause)
+- Find where origins are validated (search "unauthorized origin", "allowedOrigins", "ALLOWED_ORIGINS", "origin"). Make it accept http://localhost:5199 and http://127.0.0.1:5199, plus the default Vite port 5173 and the preview/production port if used.
+- Read the port from a single source of truth (an env variable like ALLOWED_ORIGINS and/or vite.config.js) so the frontend port and the allowlist can't drift apart. Add it to .env.example.
+- Keep the security check. Do NOT disable origin validation or use "*". Only allow localhost/127.0.0.1 on expected ports (plus origins explicitly listed in the env variable). Unknown origins must still be rejected.
+- Improve the rejection log to print the rejected origin AND the allowed list.
+- Make sure the client WebSocket URL (src/agent/socket.js), CORS config, vite.config.js, and dev scripts all use consistent ports. Remove hard-coded mismatches.
+
+B. Provider / CLI connection (check after A works)
+- Find how the backend connects to each provider (spawning the claude/codex CLI, a local SDK, or OAuth tokens) and how the health check works.
+- Log the exact failure (command, exit code, stderr, HTTP status) in the server log, and show a specific reason in the UI banner instead of a generic "offline".
+- On Windows, check that `claude` and `codex` resolve on PATH for the backend process. Fix ENOENT or .cmd/.ps1 shim spawn problems (for example `shell: true` or the resolved full path).
+- Check login status for each CLI. If not logged in, show a clear message like "Not logged in. Run `claude login` / `codex login` in a terminal" with a Retry that re-runs the real check.
+- Verify each model ID in the dropdown (Sonnet, Opus, Haiku, GPT-5.5, GPT-5.4, GPT-5.4 Mini) is valid for the CLI/provider it is sent to. Move model IDs into one config file and fix invalid ones.
+
+C. Default provider, fallback and UX
+- In Consumer Mode, default to the provider that passes its health check (or the "Free AI Agent · Ulisse AI Planner" if it exists). Validate any saved selection in localStorage on load and reset it if unavailable.
+- If the chosen provider fails, fall back automatically to a working one and show "Switched to <provider>".
+- Mark unavailable providers in the dropdown (for example "Not logged in", "CLI not found").
+- Enable the input as soon as one provider is connected, with the placeholder "Tell Ulisse where you want to go…". The Retry button must re-run the real health check and update the UI.
+
+D. Tests
+- Update server/bridge.consumer.test.js to cover: allowed origin on 5199 accepted, unknown origin rejected, and provider fallback when a CLI is missing or not logged in. Run vitest and make sure everything passes.
+
+E. Verify after fixing
+- Restart `npm run dev` fully (stop with Ctrl+C, then run again). No "Rejected connection" lines should appear.
+- Clear localStorage and hard-refresh: Ulisse shows as connected, the input is enabled, and I can send a message.
+- Ulisse replies with a question and the notebook panel on the right starts filling in.
+- Selecting a provider that isn't logged in shows a specific error and falls back.
+- The currency toggle (Rupee/Euro/Dollar) and the "create it manually" link still work.
+
+Report the root cause, the exact commands I need to run (installs/logins), the files changed, and how to verify. Do not refactor unrelated code. Do not redo work that is already finished.

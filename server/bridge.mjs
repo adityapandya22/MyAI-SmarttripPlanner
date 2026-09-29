@@ -4,8 +4,13 @@
 
 import crypto from 'node:crypto'
 import { WebSocketServer } from 'ws'
+<<<<<<< HEAD
 import { isOriginAllowed } from './auth/csrf.mjs'
 import { parseCookies, getSession, createSession } from './auth/session.mjs'
+=======
+import { isOriginAllowed, getAllowedOrigins } from './auth/csrf.mjs'
+import { parseCookies, getSession } from './auth/session.mjs'
+>>>>>>> 8693e58 (Consumer bridge mode, provider status, model config, destination aliases)
 
 const TOOL_TIMEOUT_MS = 20000
 const INTERACTIVE_TIMEOUT_MS = 15 * 60 * 1000 // ask_user / propose_hotels wait for a human
@@ -23,7 +28,8 @@ export function createBridge(httpServer, options = {}) {
       // 1. Origin verification
       const origin = info.origin || info.req.headers.origin
       if (origin && !isOriginAllowed(origin, port)) {
-        console.warn(`[bridge] Rejected connection from unauthorized origin: ${origin}`)
+        const allowedList = Array.from(getAllowedOrigins(port)).join(', ')
+        console.warn(`[bridge] Rejected connection from unauthorized origin: ${origin} (allowed: ${allowedList})`)
         return callback(false, 403, 'Forbidden: Origin not allowed')
       }
 
@@ -31,6 +37,7 @@ export function createBridge(httpServer, options = {}) {
       if (db) {
         const cookies = parseCookies(info.req.headers.cookie)
         const token = cookies.sid
+<<<<<<< HEAD
         let session = getSession(db, token)
 
         // In Consumer Mode, visitors use the app without logging in first.
@@ -44,6 +51,19 @@ export function createBridge(httpServer, options = {}) {
         }
 
         info.req.session = session || { user_id: 'anonymous', role: 'user' }
+=======
+        if (token) {
+          const session = getSession(db, token)
+          if (session) {
+            info.req.session = session
+            console.log(`[bridge] Authenticated session for user ${session.user_id} (${session.role})`)
+          } else {
+            console.warn('[bridge] Invalid or expired session cookie, proceeding in consumer mode')
+          }
+        } else {
+          console.log('[bridge] No session cookie provided, connecting in consumer mode')
+        }
+>>>>>>> 8693e58 (Consumer bridge mode, provider status, model config, destination aliases)
       }
 
       callback(true)
@@ -97,7 +117,7 @@ export function createBridge(httpServer, options = {}) {
       }
 
       // Chat and user interactions
-      if (msg.type === 'chat' || msg.type === 'stop' || msg.type === 'reset' || msg.type === 'models_get') {
+      if (msg.type === 'chat' || msg.type === 'stop' || msg.type === 'reset' || msg.type === 'models_get' || msg.type === 'providers_get') {
         msg.userId = ws.session.user_id
         chatHandler?.(msg, ws)
       }

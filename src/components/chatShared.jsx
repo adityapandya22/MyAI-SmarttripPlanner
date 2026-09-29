@@ -419,6 +419,7 @@ export function ModelPicker({ up = false }) {
   const select = useAgentChat((s) => s.select)
   const codexModels = useAgentChat((s) => s.codexModels)
   const resolvedClaude = useAgentChat((s) => s.resolvedClaude)
+  const providerStatus = useAgentChat((s) => s.providerStatus)
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
@@ -483,32 +484,42 @@ export function ModelPicker({ up = false }) {
             up ? 'bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2' : 'left-0 top-[calc(100%+6px)]'
           }`}
         >
-          {engines.map((e) => (
-            <div key={e.id} className="mb-1 last:mb-0">
-              <p className="flex items-baseline gap-1.5 px-2 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-400">
-                <span className={`size-1.5 translate-y-[-1px] rounded-full ${dotColor(e.id)}`} />
-                {e.name} <span className="font-medium normal-case tracking-normal">{e.note}</span>
-              </p>
-              {e.models.map((m) => {
-                const active = engine === e.id && models[e.id] === m.id
-                return (
-                  <button
-                    key={m.id}
-                    onClick={() => { select(e.id, m.id); setOpen(false) }}
-                    className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition ${
-                      active ? 'bg-violet-50' : 'hover:bg-ink-50'
-                    }`}
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className={`block text-[12.5px] font-bold ${active ? 'text-violet-700' : 'text-ink-800'}`}>{m.label}</span>
-                      <span className="block text-[10.5px] text-ink-400">{m.note}</span>
+          {engines.map((e) => {
+            const pStatus = providerStatus?.[e.id]
+            const isUnready = pStatus && !pStatus.ready
+            return (
+              <div key={e.id} className="mb-1 last:mb-0">
+                <p className="flex items-center gap-1.5 px-2 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-400">
+                  <span className={`size-1.5 rounded-full ${dotColor(e.id)}`} />
+                  <span>{e.name}</span>
+                  <span className="font-medium normal-case tracking-normal text-ink-400">{e.note}</span>
+                  {isUnready && (
+                    <span className="ml-auto rounded bg-rose-50 px-1.5 py-0.5 text-[9px] font-semibold text-rose-600 border border-rose-200">
+                      {pStatus.status === 'not_logged_in' ? 'Not logged in' : pStatus.status === 'no_key' ? 'No key' : 'Unavailable'}
                     </span>
-                    {active && <Check size={13} className="shrink-0 text-violet-600" strokeWidth={3} />}
-                  </button>
-                )
-              })}
-            </div>
-          ))}
+                  )}
+                </p>
+                {e.models.map((m) => {
+                  const active = engine === e.id && models[e.id] === m.id
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => { select(e.id, m.id); setOpen(false) }}
+                      className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition ${
+                        active ? 'bg-violet-50' : isUnready ? 'hover:bg-rose-50/50 opacity-75' : 'hover:bg-ink-50'
+                      }`}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className={`block text-[12.5px] font-bold ${active ? 'text-violet-700' : 'text-ink-800'}`}>{m.label}</span>
+                        <span className="block text-[10.5px] text-ink-400">{m.note}</span>
+                      </span>
+                      {active && <Check size={13} className="shrink-0 text-violet-600" strokeWidth={3} />}
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

@@ -1,0 +1,28 @@
+Bug: On the trip creation screen ("Where are we going?"), the chat input is disabled and shows the placeholder "Ulisse not connected". The send button is greyed out, so I can't chat with the AI travel agent (Ulisse). The header badge says "Consumer Mode · No Key Needed" and the agent selector says "Free AI Agent · Ulisse AI Planner", so it should work without me entering any API key.
+
+Please investigate and fix this end to end:
+
+1. Find where the "Ulisse not connected" string is set. Trace what condition makes the app treat Ulisse as disconnected (a connection/status flag, a health check, a missing env variable, a failed fetch, a wrong base URL/port, etc.).
+
+2. Check the backend/AI service:
+   - Is the server running, and is the frontend calling the correct URL and port?
+   - Are the API routes (chat/planner endpoints) defined and returning valid responses?
+   - Check for CORS errors, 404/500 responses, and failed network calls in the browser console and the server terminal.
+   - Check that .env values (API keys, model name, base URL) are loaded correctly, and that a missing key isn't blocking "Consumer Mode". Consumer Mode should work with a free/default provider and no user-supplied key.
+
+3. Check the frontend logic:
+   - Look at how the connection status is initialised. It may default to "disconnected" and never update, or the status check may throw silently.
+   - Make sure the input is enabled once the agent is ready, and the placeholder changes to something like "Tell Ulisse where you want to go…".
+   - Add a proper loading state ("Connecting to Ulisse…") and a clear error state with a Retry button instead of a permanently disabled input.
+
+4. Add a fallback: if the primary AI provider fails, fall back to the free/default provider or a mock response, so the chat never gets stuck.
+
+5. Add console/server logging for the connection check so failures are easy to diagnose.
+
+6. After fixing, run the app and test:
+   - The page loads and the status shows connected.
+   - The input is enabled and I can type and send a message.
+   - Ulisse replies with a question, and the notebook panel on the right starts filling in.
+   - The currency toggles (Rupee/Euro/Dollar) and the "create it manually" link still work.
+
+Tell me the root cause, list the files you changed, and explain what you fixed. Don't refactor unrelated code.

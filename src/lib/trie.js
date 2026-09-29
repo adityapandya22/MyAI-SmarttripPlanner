@@ -1,3 +1,5 @@
+import { ALIASES as DEFAULT_ALIASES } from '../data/destinationAliases.js'
+
 /**
  * Trie (prefix tree) for autocomplete over state names, capitals, aliases, and attractions.
  *
@@ -104,10 +106,10 @@ export class Trie {
  * aliases, and attraction names from the INDIA_STATES dataset.
  *
  * @param {object[]} INDIA_STATES  – array from indiaStates.js
- * @param {object}   ALIASES       – alias map from destination.mjs
+ * @param {object}   [ALIASES]     – alias map from destinationAliases.js
  * @returns {Trie}
  */
-export function buildDestinationTrie(INDIA_STATES, ALIASES = {}) {
+export function buildDestinationTrie(INDIA_STATES, ALIASES = DEFAULT_ALIASES) {
   const trie = new Trie()
   const norm = (s = '') => String(s).toLowerCase().trim().replace(/\s+/g, ' ')
 

@@ -13,6 +13,8 @@ export const HTTP_POLICIES = [
   { method: 'GET', path: '/api/auth/me', role: 'public' },
 
   // Public/shared lookup endpoints
+  { method: 'GET', path: '/api/places/search', role: 'public' },
+  { method: 'GET', path: '/api/places/attractions', role: 'public' },
   { method: 'GET', path: '/api/places/suggest', role: 'public' },
   { method: 'GET', path: '/api/places/resolve', role: 'public' },
   { method: 'GET', path: '/api/pricing/rates', role: 'public' },
@@ -44,11 +46,16 @@ export const HTTP_POLICIES = [
 ]
 
 export const WS_POLICIES = {
-  // Chat & agent execution: any authenticated user
+  // Chat & agent execution: any user or consumer session
   chat: 'user',
   stop: 'user',
   reset: 'user',
   status: 'user',
+  models_get: 'user',
+  tool_result: 'user',
+  auth_start: 'user',
+  auth_code: 'user',
+  auth_cancel: 'user',
 
   // Admin configuration & inspection: admin only
   admin_get_config: 'admin',

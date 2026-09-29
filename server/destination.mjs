@@ -23,46 +23,8 @@ export const norm = (s = '') =>
         .replace(/\s+/g, ' ')
         .trim()
 
-/**
- * Alias map – maps state id to extra tokens that should match it.
- * Keys must match the `id` field of an INDIA_STATES entry.
- * Extend with more aliases as needed.
- */
-export const ALIASES = {
-  'himachal-pradesh': [
-    'himachal', 'hp', 'shimla', 'manali', 'dharamshala', 'kullu',
-    'spiti', 'kasol', 'dalhousie', 'old manali', 'new manali', 'mcleod ganj',
-  ],
-  goa: ['goa', 'panaji', 'panjim', 'baga', 'calangute', 'palolem', 'anjuna'],
-  'jammu-and-kashmir': ['kashmir', 'srinagar', 'gulmarg', 'pahalgam', 'jammu'],
-  ladakh: ['ladakh', 'leh', 'pangong', 'nubra', 'leh ladakh'],
-  'uttar-pradesh': ['varanasi', 'benares', 'agra', 'lucknow', 'mathura', 'vrindavan', 'allahabad', 'prayagraj'],
-  rajasthan: ['jaipur', 'udaipur', 'jodhpur', 'jaisalmer', 'pushkar', 'ajmer'],
-  kerala: ['kerala', 'kochi', 'munnar', 'alleppey', 'alappuzha', 'kovalam', 'varkala', 'wayanad', 'thrissur', 'kozhikode'],
-  karnataka: ['bangalore', 'bengaluru', 'mysore', 'mysuru', 'hampi', 'coorg', 'gokarna', 'mangalore'],
-  'tamil-nadu': ['chennai', 'madurai', 'ooty', 'kodaikanal', 'mahabalipuram', 'rameswaram', 'thanjavur', 'pondicherry'],
-  maharashtra: ['mumbai', 'pune', 'nashik', 'aurangabad', 'lonavala', 'mahabaleshwar', 'bombay'],
-  gujarat: ['ahmedabad', 'surat', 'gandhinagar', 'vadodara', 'somnath', 'dwarka', 'rann', 'kutch', 'gir'],
-  'west-bengal': ['kolkata', 'calcutta', 'darjeeling', 'siliguri', 'sundarbans'],
-  assam: ['guwahati', 'kaziranga', 'majuli', 'dispur'],
-  meghalaya: ['shillong', 'cherrapunji', 'mawlynnong', 'dawki'],
-  'arunachal-pradesh': ['tawang', 'itanagar', 'ziro'],
-  sikkim: ['gangtok', 'pelling', 'lachung', 'tsomgo'],
-  uttarakhand: ['dehradun', 'rishikesh', 'haridwar', 'nainital', 'mussoorie', 'kedarnath', 'badrinath', 'corbett'],
-  'madhya-pradesh': ['bhopal', 'khajuraho', 'kanha', 'bandhavgarh', 'orchha', 'ujjain'],
-  telangana: ['hyderabad', 'secunderabad', 'charminar', 'warangal'],
-  'andhra-pradesh': ['tirupati', 'visakhapatnam', 'vizag', 'vijayawada', 'amaravati'],
-  delhi: ['delhi', 'new delhi', 'ndls', 'connaught place', 'chandni chowk'],
-  punjab: ['amritsar', 'ludhiana', 'chandigarh', 'patiala', 'golden temple'],
-  'andaman-and-nicobar-islands': ['andaman', 'port blair', 'havelock', 'neil island'],
-  puducherry: ['pondicherry', 'puducherry', 'auroville'],
-  odisha: ['bhubaneswar', 'puri', 'konark', 'cuttack'],
-  bihar: ['patna', 'bodh gaya', 'nalanda', 'rajgir'],
-  jharkhand: ['ranchi', 'jamshedpur', 'deoghar'],
-  'manipur': ['imphal'],
-  'nagaland': ['kohima', 'dimapur'],
-  'tripura': ['agartala'],
-}
+import { ALIASES } from '../src/data/destinationAliases.js'
+export { ALIASES }
 
 /**
  * True if the whole word `word` appears in string `haystack`.

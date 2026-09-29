@@ -6,12 +6,13 @@
 
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import { spawn } from 'node:child_process'
-import { readFileSync, existsSync, readdirSync, mkdirSync, writeFileSync } from 'node:fs'
+import { readFileSync, readdirSync, mkdirSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { homedir } from 'node:os'
 import { createTripTools, TRIP_TOOL_NAMES } from './tools.mjs'
 import { runFreeAgent, runOpenAiCompat } from './freeAgent.mjs'
+import { resolveBinary, checkProviderStatus } from './providers/status.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -32,13 +33,13 @@ const PROMPTS = Object.fromEntries(PROMPT_LANGS.map((lang) => {
 }))
 const promptsFor = (language) => PROMPTS[language] ?? PROMPTS.it
 const codexWorkspace = (language) => join(__dirname, 'codex-workspace', PROMPTS[language] ? language : 'it')
+
 for (const lang of PROMPT_LANGS) {
   mkdirSync(join(__dirname, 'codex-workspace', lang), { recursive: true })
   writeFileSync(join(__dirname, 'codex-workspace', lang, 'AGENTS.md'), PROMPTS[lang].agentsMd)
 }
 /* prefer the project-pinned Codex CLI over whatever brew has */
-const LOCAL_CODEX = join(__dirname, '..', 'node_modules', '.bin', 'codex')
-export const CODEX_BIN = existsSync(LOCAL_CODEX) ? LOCAL_CODEX : 'codex'
+export const CODEX_BIN = process.env.CODEX_BIN || resolveBinary('codex')
 const MAX_TURNS = 100
 const CLAUDE_MODELS = new Set(['sonnet', 'opus', 'haiku'])
 /* the model slugs OpenAI accepts for ChatGPT accounts change over time:
@@ -97,6 +98,17 @@ export function createAgent(bridge, { mcpPort, auth }) {
 
   /* ---------- Claude (Agent SDK) ---------- */
   async function runClaude(text, { model, sessionId, mode, notes, currency, language }) {
+    const pStatus = checkProviderStatus(auth)
+    if (!pStatus.claude?.ready) {
+      console.warn(`[agent] Claude is not logged in (${pStatus.claude?.message}). Seamlessly serving trip with Free AI Agent.`)
+      bridge.broadcast({
+        type: 'assistant_text',
+        text: 'Claude is not logged in. Switched to Free AI Agent (Ulisse AI Planner).\n\n',
+      })
+      await runFreeAgent(text, { model, sessionId, mode, notes, currency, language, bridge })
+      return
+    }
+
     const abort = new AbortController()
     active = { abort: () => abort.abort() }
     try {
@@ -158,7 +170,11 @@ export function createAgent(bridge, { mcpPort, auth }) {
       }
     } catch (e) {
       if (!abort.signal.aborted) {
-        console.log('[agent] Claude engine unavailable or not logged in. Seamlessly serving trip with Free AI Agent:', e?.message || e)
+        console.warn(`[agent] Claude engine unavailable or not logged in (error: ${e?.message || e}). Seamlessly serving trip with Free AI Agent.`)
+        bridge.broadcast({
+          type: 'assistant_text',
+          text: 'Claude is not logged in. Switched to Free AI Agent (Ulisse AI Planner).\n\n',
+        })
         await runFreeAgent(text, { model, sessionId, mode, notes, currency, language, bridge, abortSignal: abort.signal })
       }
     }
@@ -166,6 +182,17 @@ export function createAgent(bridge, { mcpPort, auth }) {
 
   /* ---------- Codex (ChatGPT subscription) ---------- */
   async function runCodex(text, { model, sessionId, mode, notes, currency, language }) {
+    const pStatus = checkProviderStatus(auth)
+    if (!pStatus.codex?.ready) {
+      console.warn(`[agent] Codex is not logged in (${pStatus.codex?.message}). Seamlessly serving trip with Free AI Agent.`)
+      bridge.broadcast({
+        type: 'assistant_text',
+        text: 'ChatGPT/Codex is not logged in. Switched to Free AI Agent (Ulisse AI Planner).\n\n',
+      })
+      await runFreeAgent(text, { model, sessionId, mode, notes, currency, language, bridge })
+      return
+    }
+
     /* Codex reads AGENTS.md (planner persona) from the per-language workspace;
        interview rules ride along with the first message of an interview chat,
        the notebook every turn */
@@ -197,9 +224,16 @@ export function createAgent(bridge, { mcpPort, auth }) {
       console.log(`[codex] ${sessionId ? `resume ${sessionId.slice(0, 8)}…` : 'new session'} · model ${pickCodexModel(model)}${model !== pickCodexModel(model) ? ` (requested: ${model})` : ''}`)
       let child
       try {
-        child = spawn(CODEX_BIN, args, { stdio: ['ignore', 'pipe', 'pipe'] })
-      } catch {
-        console.log('[agent] Codex CLI not installed. Seamlessly serving trip with Free AI Agent.')
+        child = spawn(CODEX_BIN, args, {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          ...(process.platform === 'win32' ? { shell: true } : {}),
+        })
+      } catch (err) {
+        console.warn(`[agent] Codex CLI spawn error (command: ${CODEX_BIN}, error: ${err.message}). Seamlessly serving trip with Free AI Agent.`)
+        bridge.broadcast({
+          type: 'assistant_text',
+          text: 'ChatGPT/Codex is not logged in. Switched to Free AI Agent (Ulisse AI Planner).\n\n',
+        })
         runFreeAgent(text, { model, sessionId, mode, notes, currency, language, bridge }).finally(resolve)
         return
       }
@@ -222,13 +256,21 @@ export function createAgent(bridge, { mcpPort, auth }) {
         }
       })
       child.stderr.on('data', (c) => { stderr += c.toString() })
-      child.on('error', () => {
-        console.log('[agent] Codex CLI spawn error. Seamlessly serving trip with Free AI Agent.')
+      child.on('error', (err) => {
+        console.warn(`[agent] Codex CLI process error (command: ${CODEX_BIN}, error: ${err?.message || err}). Seamlessly serving trip with Free AI Agent.`)
+        bridge.broadcast({
+          type: 'assistant_text',
+          text: 'ChatGPT/Codex is not logged in. Switched to Free AI Agent (Ulisse AI Planner).\n\n',
+        })
         runFreeAgent(text, { model, sessionId, mode, notes, currency, language, bridge }).finally(resolve)
       })
       child.on('close', (code) => {
         if (code !== 0 && !sawMessage) {
-          console.log(`[agent] Codex exited with code ${code}. Seamlessly serving trip with Free AI Agent:`, stderr.slice(-150))
+          console.warn(`[agent] Codex process exited with code ${code} (command: ${CODEX_BIN}, stderr: ${stderr.slice(-200).trim() || 'none'}). Seamlessly serving trip with Free AI Agent.`)
+          bridge.broadcast({
+            type: 'assistant_text',
+            text: 'ChatGPT/Codex is not logged in. Switched to Free AI Agent (Ulisse AI Planner).\n\n',
+          })
           runFreeAgent(text, { model, sessionId, mode, notes, currency, language, bridge }).finally(resolve)
         } else {
           resolve()
@@ -252,21 +294,21 @@ export function createAgent(bridge, { mcpPort, auth }) {
           return
         }
         if (ev.type === 'error' && ev.message) {
-          if (/retrying \d/.test(ev.message)) return // transient retries: stay quiet
-          console.error(`[codex] errore: ${String(ev.message).slice(0, 200)}`)
-          lastError = fmtCodexError(ev.message)
-          sawMessage = true
-          const isAuth = /login|not supported.*ChatGPT|auth/i.test(ev.message)
+          const isAuth = /login|not supported.*ChatGPT|auth|401 Unauthorized|Missing bearer/i.test(ev.message)
           if (isAuth) {
             console.log('[agent] Codex auth issue detected. Seamlessly serving trip with Free AI Agent.')
             child.kill('SIGTERM')
             bridge.broadcast({
               type: 'assistant_text',
-              text: 'Using the free planner; add an API key in Admin for smarter plans.\n\n',
+              text: 'ChatGPT/Codex is not logged in. Switched to Free AI Agent (Ulisse AI Planner).\n\n',
             })
             runFreeAgent(text, { model, sessionId, mode, notes, currency, language, bridge }).finally(resolve)
             return
           }
+          if (/retrying \d|Reconnecting/i.test(ev.message)) return // transient retries: stay quiet
+          console.error(`[codex] errore: ${String(ev.message).slice(0, 200)}`)
+          lastError = fmtCodexError(ev.message)
+          sawMessage = true
           bridge.broadcast({ type: 'agent_error', error: lastError })
           return
         }
@@ -410,15 +452,19 @@ export function createAgent(bridge, { mcpPort, auth }) {
       }
     }, 10000)
   })
-  bridge.onTabBack(() => clearTimeout(ghostTimer))
+  bridge.onTabBack(() => {
+    clearTimeout(ghostTimer)
+    bridge.broadcast({ type: 'provider_status', providers: checkProviderStatus(auth) })
+  })
 
   bridge.onChat((msg) => {
     if (msg.type === 'chat' && typeof msg.text === 'string' && msg.text.trim()) {
       runTurn({ ...msg, text: msg.text.trim() })
     } else if (msg.type === 'stop') {
       active?.abort()
-    } else if (msg.type === 'models_get') {
+    } else if (msg.type === 'models_get' || msg.type === 'providers_get') {
       bridge.broadcast({ type: 'codex_models', models: codexModels() })
+      bridge.broadcast({ type: 'provider_status', providers: checkProviderStatus(auth) })
     }
   })
 }

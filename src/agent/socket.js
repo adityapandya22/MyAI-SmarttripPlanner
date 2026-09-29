@@ -49,12 +49,7 @@ export const useChats = create(
     { name: 'tripplanner.chats.v1', storage: createJSONStorage(() => (import.meta.env.VITE_DEMO === '1' ? sessionStorage : localStorage)) },
   ),
 )
-
-const CLAUDE_MODELS = ['sonnet', 'opus', 'haiku']
-/* fallback until the server sends the CLI's real list (codex_models event) */
-const CODEX_MODELS = ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini']
-const GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash']
-const VALID_ENGINES = ['free', 'gemini', 'claude', 'codex']
+import { CLAUDE_MODELS_LIST, CODEX_MODELS, GEMINI_MODELS, VALID_ENGINES } from '../config/models'
 
 const storedFor = (engine, fallback, valid) => {
   const v = localStorage.getItem(`agent.model.${engine}`)
@@ -62,21 +57,27 @@ const storedFor = (engine, fallback, valid) => {
 }
 
 const savedEngine = localStorage.getItem('agent.engine')
-const initialEngine = savedEngine === 'gemini' ? 'gemini' : 'free'
+const initialEngine = savedEngine && VALID_ENGINES.includes(savedEngine) ? savedEngine : 'free'
 
 export const useAgentChat = create((set, get) => ({
   connected: false,
+<<<<<<< HEAD
   connectionState: 'connecting', // 'connecting' | 'connected' | 'disconnected'
+=======
+  connecting: true,
+  connectionError: null,
+>>>>>>> 8693e58 (Consumer bridge mode, provider status, model config, destination aliases)
   thinking: false,
   open: true,
   panelW: 0,
   messages: [],
   streamText: '',
   engine: initialEngine,
+  providerStatus: null,
   models: {
     free: 'smart-planner',
     gemini: storedFor('gemini', 'gemini-2.0-flash', GEMINI_MODELS),
-    claude: storedFor('claude', 'sonnet', CLAUDE_MODELS),
+    claude: storedFor('claude', 'sonnet', CLAUDE_MODELS_LIST),
     codex: storedFor('codex', 'gpt-5.4', CODEX_MODELS),
   },
   codexModels: null,            // [{id,label,note}] from the CLI cache, via the server
@@ -93,6 +94,14 @@ export const useAgentChat = create((set, get) => ({
 
   retryConnection: () => retryAgentConnection(),
   setOpen: (open) => set({ open }),
+  retry: () => {
+    if (get().connected) {
+      sendWs({ type: 'models_get' })
+      sendWs({ type: 'providers_get' })
+    } else {
+      retryConnection()
+    }
+  },
 
   /* guided sign-in: the server drives the CLI login, we render progress */
   startAuth(engine) {
@@ -111,17 +120,25 @@ export const useAgentChat = create((set, get) => ({
   setShowEdits: (showEdits) => set({ showEdits }),
   /* explicit engine+model selection: nothing is ever picked at random */
   select(engine, model) {
-    let valid
-    if (engine === 'free') valid = ['smart-planner']
-    else if (engine === 'gemini') valid = GEMINI_MODELS
-    else if (engine === 'codex') valid = (get().codexModels?.map((m) => m.id) ?? CODEX_MODELS)
-    else valid = CLAUDE_MODELS
+    let targetEngine = engine
+    const status = get().providerStatus?.[targetEngine]
+    if (targetEngine !== 'free' && status && !status.ready) {
+      toast(status.message || `Provider ${targetEngine} is not available`)
+      targetEngine = 'free'
+      model = 'smart-planner'
+    }
 
-    const m = valid.includes(model) ? model : valid.includes(get().models[engine]) ? get().models[engine] : valid[0]
-    localStorage.setItem('agent.engine', engine)
-    localStorage.setItem(`agent.model.${engine}`, m)
-    if (engine !== get().engine && get().messages.length) get().newChat()
-    set((s) => ({ engine, models: { ...s.models, [engine]: m } }))
+    let valid
+    if (targetEngine === 'free') valid = ['smart-planner']
+    else if (targetEngine === 'gemini') valid = GEMINI_MODELS
+    else if (targetEngine === 'codex') valid = (get().codexModels?.map((m) => m.id) ?? CODEX_MODELS)
+    else valid = CLAUDE_MODELS_LIST
+
+    const m = valid.includes(model) ? model : valid.includes(get().models[targetEngine]) ? get().models[targetEngine] : valid[0]
+    localStorage.setItem('agent.engine', targetEngine)
+    localStorage.setItem(`agent.model.${targetEngine}`, m)
+    if (targetEngine !== get().engine && get().messages.length) get().newChat()
+    set((s) => ({ engine: targetEngine, models: { ...s.models, [targetEngine]: m } }))
   },
 
   send(text) {
@@ -409,6 +426,17 @@ function handleEvent(msg) {
       if (msg.auth) push({ role: 'setup', engine: msg.auth, text: msg.error, canUseFree: !!msg.canUseFree })
       else push({ role: 'error', text: msg.error, canUseFree: !!msg.canUseFree })
       break
+    case 'provider_status': {
+      const providers = msg.providers || {}
+      useAgentChat.setState({ providerStatus: providers })
+      const cur = useAgentChat.getState().engine
+      if (cur !== 'free' && providers[cur] && !providers[cur].ready) {
+        console.warn(`[agent/socket] Engine ${cur} not ready (${providers[cur].message}). Falling back to free agent.`)
+        toast(`Switched to Free AI Agent (Ulisse AI Planner)`)
+        useAgentChat.getState().select('free', 'smart-planner')
+      }
+      break
+    }
     case 'codex_models': {
       /* the CLI's currently valid slugs: heal a stale saved selection */
       const list = Array.isArray(msg.models) ? msg.models.filter((m) => m?.id) : []
@@ -471,16 +499,25 @@ function handleEvent(msg) {
   }
 }
 
+<<<<<<< HEAD
 export function connectAgent(isManual = false) {
+=======
+export function connectAgent(force = false) {
+>>>>>>> 8693e58 (Consumer bridge mode, provider status, model config, destination aliases)
   if (DEMO) {
     if (demoAgent) return
     import('../demo/agent').then((m) => {
       demoAgent = m.createDemoAgent(handleEvent)
+<<<<<<< HEAD
       useAgentChat.setState({ connected: true, connectionState: 'connected' })
+=======
+      useAgentChat.setState({ connected: true, connecting: false, connectionError: null })
+>>>>>>> 8693e58 (Consumer bridge mode, provider status, model config, destination aliases)
       sendWs({ type: 'models_get' })
     })
     return
   }
+<<<<<<< HEAD
   if (ws && (ws.readyState === 0 || ws.readyState === 1)) {
     if (ws.readyState === 1) {
       useAgentChat.setState({ connected: true, connectionState: 'connected' })
@@ -499,20 +536,41 @@ export function connectAgent(isManual = false) {
   } catch (err) {
     console.warn(`[Ulisse Agent] Failed to create WebSocket for ${url}:`, err)
     useAgentChat.setState({ connected: false, connectionState: 'disconnected' })
+=======
+  if (!force && ws && (ws.readyState === 0 || ws.readyState === 1)) return
+  if (force && ws) {
+    try { ws.close() } catch { /* ignore */ }
+    ws = null
+  }
+  useAgentChat.setState({ connecting: true, connectionError: null })
+  console.log(`[agent/socket] Connecting to ${WS_URL}`)
+  try {
+    ws = new WebSocket(WS_URL)
+  } catch (err) {
+    console.error(`[agent/socket] WebSocket connection constructor failed:`, err)
+    useAgentChat.setState({ connected: false, connecting: false, connectionError: err.message || 'Connection failed' })
+>>>>>>> 8693e58 (Consumer bridge mode, provider status, model config, destination aliases)
     scheduleRetry()
     return
   }
 
   ws.onopen = () => {
+<<<<<<< HEAD
     console.log(`[Ulisse Agent] Connected successfully to ${url}`)
     connectionAttempts = 0
     useAgentChat.setState({ connected: true, connectionState: 'connected' })
+=======
+    console.log(`[agent/socket] Connected successfully to ${WS_URL}`)
+    useAgentChat.setState({ connected: true, connecting: false, connectionError: null })
+>>>>>>> 8693e58 (Consumer bridge mode, provider status, model config, destination aliases)
     sendWs({ type: 'models_get' })
+    sendWs({ type: 'providers_get' })
   }
   ws.onmessage = (e) => {
     try { handleEvent(JSON.parse(e.data)) } catch { /* ignore malformed frames */ }
   }
   ws.onclose = (ev) => {
+<<<<<<< HEAD
     console.log(`[Ulisse Agent] WebSocket closed (code: ${ev.code}, clean: ${ev.wasClean})`)
     connectionAttempts++
     useAgentChat.setState({ connected: false, connectionState: 'disconnected', thinking: false })
@@ -520,16 +578,30 @@ export function connectAgent(isManual = false) {
   }
   ws.onerror = (err) => {
     console.warn(`[Ulisse Agent] WebSocket error on ${url}:`, err)
+=======
+    console.warn(`[agent/socket] Disconnected (code: ${ev.code}, reason: ${ev.reason || 'normal'})`)
+    useAgentChat.setState({ connected: false, connecting: false, thinking: false })
+    scheduleRetry()
+  }
+  ws.onerror = (err) => {
+    console.error(`[agent/socket] Connection error:`, err)
+    useAgentChat.setState({ connectionError: 'Failed to connect to agent server' })
+>>>>>>> 8693e58 (Consumer bridge mode, provider status, model config, destination aliases)
     ws?.close()
   }
 }
 
+<<<<<<< HEAD
 export function retryAgentConnection() {
   clearTimeout(retryTimer)
   if (ws) {
     try { ws.close() } catch {}
     ws = null
   }
+=======
+export function retryConnection() {
+  clearTimeout(retryTimer)
+>>>>>>> 8693e58 (Consumer bridge mode, provider status, model config, destination aliases)
   connectAgent(true)
 }
 
