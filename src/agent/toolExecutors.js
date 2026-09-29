@@ -95,7 +95,8 @@ const toPatch = (a) => {
   if (a.transport_mode !== undefined) p.mode = a.transport_mode
   if (a.time !== undefined) p.time = a.time
   if (a.duration_min !== undefined) p.dur = a.duration_min
-  if (a.price_usd !== undefined) p.price = a.price_usd
+  if (a.price !== undefined) p.price = a.price
+  else if (a.price_usd !== undefined) p.price = a.price_usd
   if (a.notes !== undefined) p.notes = a.notes
   if (a.links !== undefined) p.links = a.links
   if (a.must_see !== undefined) p.must = a.must_see
@@ -170,7 +171,7 @@ const EXECUTORS = {
       imgs: [],
       noWiki: false,
       sug: null,
-      price: a.price_usd ?? 0,
+      price: a.price ?? a.price_usd ?? 0,
       mode: (a.type ?? 'activity') === 'drive' ? (a.transport_mode ?? 'car') : null,
     }
     let dayId, index

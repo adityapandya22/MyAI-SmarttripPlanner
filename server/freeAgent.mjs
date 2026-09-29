@@ -10,6 +10,7 @@
 import { z } from 'zod'
 import { TOOL_DEFS, makeToolHandler } from './tools.mjs'
 import { findDestination } from './destination.mjs'
+import { getHotelProvider, getRestaurantProvider, getProviderMode } from './providers/index.mjs'
 
 // Re-export for backwards compatibility (tests import directly from this file)
 export { findDestination } from './destination.mjs'
@@ -45,6 +46,24 @@ async function streamText(bridge, fullText, signal, speedMs = 15) {
   }
 }
 
+/** Minor words to keep lowercased unless at beginning or end */
+const MINOR_WORDS = new Set(['a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'in', 'nor', 'of', 'on', 'or', 'the', 'to', 'up', 'with'])
+
+/** Title-case a string e.g. "goa" -> "Goa", "old manali trip" -> "Old Manali Trip" */
+export function toTitleCase(str) {
+  if (!str || typeof str !== 'string') return ''
+  return str
+    .split(/\s+/)
+    .map((word, idx, arr) => {
+      const lower = word.toLowerCase()
+      if (idx > 0 && idx < arr.length - 1 && MINOR_WORDS.has(lower)) {
+        return lower
+      }
+      return lower.charAt(0).toUpperCase() + lower.slice(1)
+    })
+    .join(' ')
+}
+
 /**
  * Parse day count from user prompt text, e.g. "8 to 10 days", "10 days", "8-10 days".
  * Returns the upper bound of any range, or null if no day count found.
@@ -55,6 +74,37 @@ export function parseDaysFromText(text) {
   const a = parseInt(m[1], 10)
   const b = m[2] ? parseInt(m[2], 10) : a
   return Math.max(a, b)
+}
+
+/** Extract thematic tags from attraction name & description */
+export function getAttractionTags(item) {
+  const name = typeof item === 'object' && item?.name ? item.name : String(item)
+  const desc = typeof item === 'object' && item?.description ? item.description : ''
+  const text = `${name} ${desc}`.toLowerCase()
+  const tags = new Set()
+  if (/panaji|panjim|fontainhas|mandovi|miramar|quarter/i.test(text)) tags.add('panaji')
+  if (/fort|basilica|cathedral|church|heritage|palace|tomb|monument|museum|unesco|cave|temple/i.test(text)) tags.add('heritage')
+  if (/beach|sea|coast|sand|shack|cove|cliff/i.test(text)) tags.add('beach')
+  if (/falls|waterfall|nature|lake|valley|pass|sanctuary|park|plantation|garden|forest|trek|hills|mountain|tea/i.test(text)) tags.add('nature')
+  if (/market|bazaar|flea|craft|shopping|street|spice/i.test(text)) tags.add('market')
+  if (/cultural|dance|art|folk|cruise|music/i.test(text)) tags.add('culture')
+  return tags
+}
+
+/** Generate guaranteed distinct coordinates with deterministic tiny offsets */
+function getDistinctCoords(usedCoords, lat, lng) {
+  let cLat = Number(Number(lat).toFixed(4))
+  let cLng = Number(Number(lng).toFixed(4))
+  let key = `${cLat},${cLng}`
+  let step = 1
+  while (usedCoords.has(key)) {
+    cLat = Number((Number(lat) + step * 0.0035).toFixed(4))
+    cLng = Number((Number(lng) - step * 0.0028).toFixed(4))
+    key = `${cLat},${cLng}`
+    step++
+  }
+  usedCoords.add(key)
+  return { lat: cLat, lng: cLng }
 }
 
 /** Day title templates for varied multi-day itineraries */
@@ -158,9 +208,15 @@ function groupAttractionsByArea(attractions, stateCoords, stateName) {
 /**
  * Autonomous Free AI Agent (No subscriptions, No login required).
  */
-export async function runFreeAgent(text, { mode, currency = 'INR', language = 'en', bridge, abortSignal, startDate = null }) {
+export async function runFreeAgent(text, { mode, currency = 'INR', language = 'en', bridge, abortSignal, startDate = null, fallbackNotice = null }) {
   const cur = currency || 'INR'
   const isIt = String(language).startsWith('it')
+
+  // Stream friendly fallback notice if routed from a missing/failed key
+  if (fallbackNotice) {
+    const noticeText = `*(${fallbackNotice})*\n\n`
+    await streamText(bridge, noticeText, abortSignal, 10)
+  }
 
   let matchedState
   try {
@@ -191,16 +247,17 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
     const userDays = parseDaysFromText(text)
     const daysCount = Math.min(userDays || matchedState?.suggestedDays || 5, 14)
     const coords = matchedState?.coords || { lat: 26.9124, lng: 75.7873 }
+    const titleCasedDest = toTitleCase(destName)
 
     // Derive dates from startDate (offset 0 and 1) or fallback (today+14, today+15)
     const checkin = deriveDateStr(startDate, 0)
     const checkout = deriveDateStr(startDate, 1)
 
-    // 1. Set Trip Meta
-    bridge.broadcast({ type: 'agent_tool', name: 'set_trip_meta', args: { title: `Trip to ${destName}`, currency: cur, car_gas_unit: 'inr_l' } })
+    // 1. Set Trip Meta (with title-cased name and INR currency)
+    bridge.broadcast({ type: 'agent_tool', name: 'set_trip_meta', args: { title: `Trip to ${titleCasedDest}`, currency: cur, car_gas_unit: 'inr_l' } })
     try {
       await bridge.callBrowser('set_trip_meta', {
-        title: `Trip to ${destName}`,
+        title: `Trip to ${titleCasedDest}`,
         currency: cur,
         car_gas_unit: 'inr_l',
         car_gas_price: 96,
@@ -384,7 +441,7 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
       }
     }
 
-    // 4. Search and recommend hotels in ₹
+    // 4. Broadcast hotel and restaurant search events for UI visibility
     bridge.broadcast({
       type: 'agent_tool',
       name: 'search_hotels',
@@ -402,7 +459,6 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
       // safe fallback
     }
 
-    // 5. Search dining in ₹
     bridge.broadcast({
       type: 'agent_tool',
       name: 'search_restaurants',

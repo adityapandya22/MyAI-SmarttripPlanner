@@ -58,7 +58,14 @@ export default function MapPanel() {
   const layers = layersAll.filter((l) => !mapFilter || l.day.id === mapFilter)
   const visibleLegs = legs.filter((l) => !mapFilter || l.dayId === mapFilter)
   const dayColor = useMemo(() => Object.fromEntries(days.map((d) => [d.id, d.color])), [days])
-  const allCoords = layers.flatMap((l) => l.points.map((p) => [p.item.lat, p.item.lng]))
+  const allCoords = useMemo(
+    () => layers.flatMap((l) => l.points.filter((p) => typeof p.item?.lat === 'number' && typeof p.item?.lng === 'number').map((p) => [p.item.lat, p.item.lng])),
+    [layers]
+  )
+  const coordsDepKey = useMemo(
+    () => `${mapFilter ?? 'all'}|${fitNonce}|${allCoords.length}|${allCoords.map((c) => `${c[0]?.toFixed(2)},${c[1]?.toFixed(2)}`).join(';')}`,
+    [mapFilter, fitNonce, allCoords]
+  )
 
   /* shift map overlays left while the floating chat covers the right side */
   const chatShift = useAgentChat((s) => (s.open ? s.panelW : 0))

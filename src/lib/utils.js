@@ -130,8 +130,7 @@ export function normalizeTrip(raw) {
   t.brief ||= ''
   t.notes ||= ''
   t.transport = ['car', 'walk', 'transit', 'mixed'].includes(t.transport) ? t.transport : 'car'
-  /* interview trips choose their currency before the first message */
-  t.currency = ['INR', 'EUR', 'USD'].includes(t.currency) ? t.currency : t.phase === 'interview' ? null : 'INR'
+  t.currency = ['INR', 'EUR', 'USD'].includes(t.currency) ? t.currency : 'INR'
   /* map anchor for the chosen destination (set at start_planning, before any stop exists) */
   t.center = typeof t.center?.lat === 'number' && typeof t.center?.lng === 'number'
     ? { lat: t.center.lat, lng: t.center.lng } : null
