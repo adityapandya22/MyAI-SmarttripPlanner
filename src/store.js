@@ -77,16 +77,36 @@ export const useTrip = create(
 
       /* ---------- days ---------- */
       addDay: (data) =>
-        set((s) => upd(s, (t) => ({
-          ...t,
-          days: [...t.days, {
-            id: uid(),
-            title: data.title || i18n.t('store.newDay'),
-            night: data.night || '',
-            color: data.color || DAY_COLORS[t.days.length % DAY_COLORS.length],
-            items: [],
-          }],
-        }))),
+        set((s) => upd(s, (t) => {
+          const rawItems = Array.isArray(data.items) ? data.items : (Array.isArray(data.activities) ? data.activities : [])
+          const items = rawItems.map((act) => ({
+            id: act.id || uid(),
+            type: ['drive', 'activity', 'food', 'hotel', 'info'].includes(act.type) ? act.type : 'activity',
+            title: act.title || '',
+            time: act.time || '',
+            dur: Number(act.duration_min) || Number(act.dur) || 60,
+            lat: typeof act.lat === 'number' ? act.lat : null,
+            lng: typeof act.lng === 'number' ? act.lng : null,
+            price: Number(act.price) || 0,
+            notes: act.notes || '',
+            links: Array.isArray(act.links) ? act.links : [],
+            imgs: Array.isArray(act.imgs) ? act.imgs : [],
+            must: !!act.must,
+            done: false,
+            sug: null,
+            category: act.category || null,
+          }))
+          return {
+            ...t,
+            days: [...t.days, {
+              id: uid(),
+              title: data.title || i18n.t('store.newDay'),
+              night: data.night || '',
+              color: data.color || DAY_COLORS[t.days.length % DAY_COLORS.length],
+              items,
+            }],
+          }
+        })),
       updateDay: (dayId, patch) =>
         set((s) => upd(s, (t) => ({
           ...t, days: t.days.map((d) => (d.id === dayId ? { ...d, ...patch } : d)),

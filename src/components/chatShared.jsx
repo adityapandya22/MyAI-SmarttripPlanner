@@ -67,6 +67,12 @@ export function groupMessages(messages) {
   const out = []
   for (const m of messages) {
     const last = out[out.length - 1]
+    if (m.role === 'tool' && m.name === 'add_activity' && last?.role === 'toolgroup' && last.name === 'add_day') {
+      // Absorb initial day's stops into the day's creation step so it logs as 1 step per day
+      last.subItems = last.subItems || []
+      last.subItems.push(m)
+      continue
+    }
     if (m.role === 'tool' && last?.role === 'toolgroup' && last.name === m.name) {
       last.items.push(m)
     } else if (m.role === 'tool') {

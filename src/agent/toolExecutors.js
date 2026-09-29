@@ -8,7 +8,7 @@
 
 import { useTrip, useUI, useRoutes, activeTrip } from '../store'
 import { bestInsertion, searchPlaces, chainedDayCoords, estimateDayKm, estimateTravel } from '../lib/geo'
-import { dayDate, fmtDate, fmtMoney, costByType, fuelCost, uid, GAS_UNITS } from '../lib/utils'
+import { dayDate, fmtDate, fmtMoney, costByType, fuelCost, uid, GAS_UNITS, tripTotalBudget } from '../lib/utils'
 import { classify } from '../lib/categories'
 import i18n from '../i18n'
 
@@ -138,7 +138,7 @@ const EXECUTORS = {
       notes: t.notes || undefined,
       currency: t.currency ?? 'INR',
       car: { model: t.car.model || undefined, l_per_100km: t.car.lPer100, gas_price: t.car.gasPrice, gas_unit: t.car.gasUnit },
-      budget: { ...costs, fuel: Math.round(fuelCost(km, t.car, t.currency ?? 'INR')), total: Math.round(costs.items + fuelCost(km, t.car, t.currency ?? 'INR')) },
+      budget: tripTotalBudget(t, km),
       total_km: Math.round(km),
       days: t.days
         .map((d, i) => ({
@@ -251,7 +251,8 @@ const EXECUTORS = {
   },
 
   add_day(a) {
-    useTrip.getState().addDay({ title: a.title, night: a.night })
+    const items = a.activities || a.items || []
+    useTrip.getState().addDay({ title: a.title, night: a.night, items })
     const t = trip()
     const day = t.days[t.days.length - 1]
     return {
@@ -405,8 +406,10 @@ const EXECUTORS = {
     if (a.title) s.setTitle(a.title)
     if (a.subtitle) s.setSubtitle(a.subtitle)
     if (a.transport) s.setTransport(a.transport)
+    if (a.currency) s.setCurrency(a.currency)
     if (a.start_date) s.setStartDate(a.start_date)
     if (a.car_l_per_100km) s.setCar({ lPer100: a.car_l_per_100km })
+    if (a.car_gas_price !== undefined || a.car_gas_unit) s.setCar({ gasPrice: a.car_gas_price, gasUnit: a.car_gas_unit })
     if (a.car_gas_usd_per_gal) s.setCar({ gasPrice: a.car_gas_usd_per_gal, gasUnit: 'usd_gal' })
     /* anchor the map on the destination before the planner view mounts,
        so it never opens on the previous default while the trip is empty */
@@ -565,7 +568,7 @@ export async function executeTool(name, args) {
      built: whatever the model decides, every build tool hard-errors until
      the planner is open (a tool error is impossible to ignore, a prompt
      hint is not) */
-  if (WRITE_TOOLS.has(name) && activeTrip(useTrip.getState())?.phase === 'interview') {
+  if (WRITE_TOOLS.has(name) && name !== 'set_trip_meta' && activeTrip(useTrip.getState())?.phase === 'interview') {
     throw new Error(
       "Il viaggio è ancora in fase intervista: chiama PRIMA start_planning (apre il planner e salva il brief), POI costruisci giorni, tappe, checklist e consigli.",
     )
