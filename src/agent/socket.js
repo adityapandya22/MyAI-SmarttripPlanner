@@ -10,7 +10,18 @@ import { executeTool, applyUndoOp, WRITE_TOOLS, hooks } from './toolExecutors'
 import i18n from '../i18n'
 
 const AGENT_PORT = import.meta.env.VITE_AGENT_PORT ?? 5200
-const WS_URL = `ws://${location.hostname}:${AGENT_PORT}/agent`
+
+let connectionAttempts = 0
+
+function getWsUrl() {
+  const isHttps = typeof location !== 'undefined' && location.protocol === 'https:'
+  const proto = isHttps ? 'wss:' : 'ws:'
+  const host = typeof location !== 'undefined' ? location.hostname : '127.0.0.1'
+  const agentPort = import.meta.env.VITE_AGENT_PORT ?? (typeof location !== 'undefined' && location.port === '5199' ? 5200 : (location?.port || 5200))
+  // On alternate retry attempts on localhost, try explicit 127.0.0.1 to avoid IPv6 ::1 resolution mismatches on Windows
+  const targetHost = (host === 'localhost' && connectionAttempts % 2 === 1) ? '127.0.0.1' : host
+  return `${proto}//${targetHost}:${agentPort}/agent`
+}
 
 /* demo builds (the public showcase) replace the WebSocket with a scripted
    agent that emits the same event protocol — see src/demo/agent.js */
@@ -55,6 +66,7 @@ const initialEngine = savedEngine === 'gemini' ? 'gemini' : 'free'
 
 export const useAgentChat = create((set, get) => ({
   connected: false,
+  connectionState: 'connecting', // 'connecting' | 'connected' | 'disconnected'
   thinking: false,
   open: true,
   panelW: 0,
@@ -79,6 +91,7 @@ export const useAgentChat = create((set, get) => ({
   showEdits: false,
   auth: { engine: null, phase: 'idle', url: null, needsCode: false, error: null }, // guided sign-in flow
 
+  retryConnection: () => retryAgentConnection(),
   setOpen: (open) => set({ open }),
 
   /* guided sign-in: the server drives the CLI login, we render progress */
@@ -458,35 +471,66 @@ function handleEvent(msg) {
   }
 }
 
-export function connectAgent() {
+export function connectAgent(isManual = false) {
   if (DEMO) {
     if (demoAgent) return
     import('../demo/agent').then((m) => {
       demoAgent = m.createDemoAgent(handleEvent)
-      useAgentChat.setState({ connected: true })
+      useAgentChat.setState({ connected: true, connectionState: 'connected' })
       sendWs({ type: 'models_get' })
     })
     return
   }
-  if (ws && (ws.readyState === 0 || ws.readyState === 1)) return
+  if (ws && (ws.readyState === 0 || ws.readyState === 1)) {
+    if (ws.readyState === 1) {
+      useAgentChat.setState({ connected: true, connectionState: 'connected' })
+    }
+    return
+  }
+  if (isManual) {
+    connectionAttempts = 0
+  }
+  useAgentChat.setState({ connectionState: 'connecting' })
+  const url = getWsUrl()
+  console.log(`[Ulisse Agent] Connecting to WebSocket at ${url} (attempt ${connectionAttempts + 1})...`)
+
   try {
-    ws = new WebSocket(WS_URL)
-  } catch {
+    ws = new WebSocket(url)
+  } catch (err) {
+    console.warn(`[Ulisse Agent] Failed to create WebSocket for ${url}:`, err)
+    useAgentChat.setState({ connected: false, connectionState: 'disconnected' })
     scheduleRetry()
     return
   }
+
   ws.onopen = () => {
-    useAgentChat.setState({ connected: true })
+    console.log(`[Ulisse Agent] Connected successfully to ${url}`)
+    connectionAttempts = 0
+    useAgentChat.setState({ connected: true, connectionState: 'connected' })
     sendWs({ type: 'models_get' })
   }
   ws.onmessage = (e) => {
     try { handleEvent(JSON.parse(e.data)) } catch { /* ignore malformed frames */ }
   }
-  ws.onclose = () => {
-    useAgentChat.setState({ connected: false, thinking: false })
+  ws.onclose = (ev) => {
+    console.log(`[Ulisse Agent] WebSocket closed (code: ${ev.code}, clean: ${ev.wasClean})`)
+    connectionAttempts++
+    useAgentChat.setState({ connected: false, connectionState: 'disconnected', thinking: false })
     scheduleRetry()
   }
-  ws.onerror = () => ws?.close()
+  ws.onerror = (err) => {
+    console.warn(`[Ulisse Agent] WebSocket error on ${url}:`, err)
+    ws?.close()
+  }
+}
+
+export function retryAgentConnection() {
+  clearTimeout(retryTimer)
+  if (ws) {
+    try { ws.close() } catch {}
+    ws = null
+  }
+  connectAgent(true)
 }
 
 function scheduleRetry() {

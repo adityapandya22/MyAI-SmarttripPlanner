@@ -21,8 +21,8 @@ const DEMO = import.meta.env.VITE_DEMO === '1'
 export default function InterviewView() {
   const { t, i18n } = useTranslation()
   const {
-    connected, thinking, messages, streamText, pendingQuestion,
-    send, stop,
+    connected, connectionState, thinking, messages, streamText, pendingQuestion,
+    send, stop, retryConnection,
   } = useAgentChat()
   const closeTrip = useTrip((s) => s.closeTrip)
   const setPhase = useTrip((s) => s.setPhase)
@@ -169,7 +169,8 @@ export default function InterviewView() {
             <div className={`z-10 pb-[env(safe-area-inset-bottom)] pt-3 ${empty ? '' : 'sticky bottom-0'}`}>
               <Composer
                 text={text} setText={setText} submit={submit} stop={stop}
-                connected={connected} thinking={thinking} pendingQuestion={pendingQuestion}
+                connected={connected} connectionState={connectionState} retryConnection={retryConnection}
+                thinking={thinking} pendingQuestion={pendingQuestion}
                 needCurrency={needCurrency} currency={currency} setCurrency={setCurrency}
                 currencyNudge={currencyNudge} demoLocked={DEMO && empty}
               />
@@ -252,7 +253,7 @@ function IdeaCards({ onPick }) {
    demoLocked = demo build, first message: the prompt is pre-written and the
    only interaction is hitting send. */
 function Composer({
-  text, setText, submit, stop, connected, thinking, pendingQuestion,
+  text, setText, submit, stop, connected, connectionState, retryConnection, thinking, pendingQuestion,
   needCurrency, currency, setCurrency, currencyNudge, demoLocked,
 }) {
   const { t } = useTranslation()
@@ -264,8 +265,40 @@ function Composer({
     el.style.height = 'auto'
     el.style.height = `${Math.min(el.scrollHeight, 128)}px`
   }, [text])
+
+  const placeholderText = pendingQuestion
+    ? t('interview.placeholderAnswer')
+    : connectionState === 'connecting'
+      ? (t('interview.placeholderConnecting') || 'Connecting to Ulisse…')
+      : !connected
+        ? (t('interview.placeholderOffline') || 'Ulisse not connected')
+        : needCurrency
+          ? t('interview.placeholderCurrency')
+          : t('interview.placeholder')
+
   return (
     <div className="rounded-2xl border border-ink-200 bg-white p-2 shadow-lg">
+      {!connected && (
+        <div className="mb-2 flex items-center justify-between rounded-xl bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800 border border-amber-200">
+          <div className="flex items-center gap-2">
+            <span className={`size-2 rounded-full ${connectionState === 'connecting' ? 'bg-amber-400 animate-pulse' : 'bg-rose-500'}`} />
+            <span className="font-medium">
+              {connectionState === 'connecting'
+                ? (t('interview.placeholderConnecting') || 'Connecting to Ulisse…')
+                : (t('interview.placeholderOffline') || 'Ulisse not connected')}
+            </span>
+          </div>
+          {retryConnection && connectionState !== 'connecting' && (
+            <button
+              type="button"
+              onClick={retryConnection}
+              className="rounded-lg bg-amber-200/80 px-2 py-0.5 font-bold text-amber-900 hover:bg-amber-300 transition text-[11px]"
+            >
+              {t('interview.retry') || 'Retry'}
+            </button>
+          )}
+        </div>
+      )}
       <div className="flex items-end gap-2">
         <textarea
           ref={taRef}
@@ -275,8 +308,8 @@ function Composer({
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
           }}
           rows={1}
-          placeholder={pendingQuestion ? t('interview.placeholderAnswer') : !connected ? t('interview.placeholderOffline') : needCurrency ? t('interview.placeholderCurrency') : t('interview.placeholder')}
-          aria-label={pendingQuestion ? t('interview.placeholderAnswer') : !connected ? t('interview.placeholderOffline') : needCurrency ? t('interview.placeholderCurrency') : t('interview.placeholder')}
+          placeholder={placeholderText}
+          aria-label={placeholderText}
           disabled={!connected || !!pendingQuestion}
           readOnly={demoLocked}
           className="max-h-32 min-h-10 w-full resize-none bg-transparent px-2 py-2 text-sm text-ink-800 outline-none placeholder:text-ink-300 disabled:opacity-50"
