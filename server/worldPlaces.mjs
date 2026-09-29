@@ -385,6 +385,15 @@ export const BUNDLED_CITIES_ATTRACTIONS = {
     { name: 'Times Square', lat: 40.7580, lng: -73.9855, description: 'Major commercial intersection and entertainment hub famed for neon billboards, Broadway theaters, and energy.', category: 'monument' },
     { name: 'Brooklyn Bridge', lat: 40.7061, lng: -73.9969, description: 'Historic suspension bridge connecting Manhattan and Brooklyn with a scenic elevated wooden pedestrian boardwalk.', category: 'monument' },
   ],
+  barcelona: [
+    { name: 'Basílica de la Sagrada Família', lat: 41.4036, lng: 2.1744, description: 'Antoni Gaudí’s breathtaking, soaring Roman Catholic basilica renowned for its organic nature-inspired architecture.', category: 'heritage' },
+    { name: 'Park Güell', lat: 41.4145, lng: 2.1527, description: 'Fanciful public park system composed of gardens and architectural elements on Carmel Hill, with mosaic sea views.', category: 'park' },
+    { name: 'Casa Batlló', lat: 41.3917, lng: 2.1649, description: 'Renowned modernist masterpiece on Passeig de Gràcia resembling skeletal structures and dragon scales.', category: 'monument' },
+    { name: 'Gothic Quarter (Barri Gòtic)', lat: 41.3833, lng: 2.1764, description: 'Historic center of the old city of Barcelona with labyrinthine medieval streets, hidden plazas, and tapas bars.', category: 'heritage' },
+    { name: 'Casa Milà (La Pedrera)', lat: 41.3954, lng: 2.1620, description: 'Iconic civic building designed by Antoni Gaudí with undulating stone facade and surreal rooftop chimneys.', category: 'monument' },
+    { name: 'Barceloneta Beach', lat: 41.3784, lng: 2.1897, description: 'Vibrant Mediterranean urban sand beach lined with seafood chiringuitos and palm trees.', category: 'beach' },
+    { name: 'La Boqueria Food Market', lat: 41.3817, lng: 2.1716, description: 'Historic public market entrance on La Rambla overflowing with Catalan cured meats, fresh seafood, and tapas.', category: 'market' },
+  ],
 }
 
 /* =========================================================================
@@ -676,10 +685,15 @@ export function filterCandidatesMatchingSearch(candidates, searchText) {
  * Classify a candidate: city/town/village/island vs country/state/region.
  */
 export function classifyCandidate(cand) {
+  if (!cand) return { isCity: false, type: 'unknown' }
   const type = String(cand.type || '').toLowerCase()
   const addresstype = String(cand.addresstype || '').toLowerCase()
-  const candClass = String(cand.class || '').toLowerCase()
-  const name = String(cand.name || '').toLowerCase()
+  const candClass = String(cand.class || cand.category || '').toLowerCase()
+  const name = String(cand.name || '').toLowerCase().trim()
+
+  if (BUNDLED_COUNTRY_CITIES[name] || BUNDLED_COUNTRY_CITIES[name.replace(/\s+/g, '')]) {
+    return { isCity: false, type: 'country_or_region' }
+  }
 
   // Famous tourist island and region destinations (e.g. Bali, Phuket, Ibiza, Santorini)
   if (
@@ -687,6 +701,11 @@ export function classifyCandidate(cand) {
     Boolean(BUNDLED_CITIES_ATTRACTIONS[name])
   ) {
     return { isCity: true, type: 'city' }
+  }
+
+  const broadTypes = new Set(['country', 'state', 'region', 'continent', 'province', 'nation'])
+  if (broadTypes.has(type) || broadTypes.has(addresstype)) {
+    return { isCity: false, type: 'country_or_region' }
   }
 
   const cityTypes = new Set([
@@ -698,17 +717,14 @@ export function classifyCandidate(cand) {
     'suburb',
     'hamlet',
     'borough',
-    'administrative',
   ])
-
-  const broadTypes = new Set(['country', 'state', 'region', 'continent', 'province'])
-
-  if (broadTypes.has(type) || broadTypes.has(addresstype)) {
-    return { isCity: false, type: 'country_or_region' }
-  }
 
   if (cityTypes.has(type) || cityTypes.has(addresstype) || candClass === 'place') {
     return { isCity: true, type: 'city' }
+  }
+
+  if (candClass === 'boundary' || type === 'administrative') {
+    return { isCity: false, type: 'country_or_region' }
   }
 
   return { isCity: true, type: 'city' }
@@ -1089,17 +1105,14 @@ export async function handleWorldwideInterview({
       for (let i = 0; i < daysCity1; i++) {
         const stops = optimizeDayRoute(clusters1[i % clusters1.length])
         const title = deriveDayTheme(dayNum, stops, toTitleCase(city1.name))
-        bridge.broadcast({ type: 'agent_tool', name: 'add_day', args: { title, night: toTitleCase(city1.name) } })
-        await bridge.callBrowser('add_day', { title, night: toTitleCase(city1.name) })
         const times = ['09:30', '12:30', '16:00', '19:00']
+        const dayActivities = []
         for (let sIdx = 0; sIdx < Math.min(stops.length, 4); sIdx++) {
           const st = stops[sIdx]
           const price = Math.round(curInfo.dailyBudget * 0.18)
           totalBudget += price
           totalStops++
-          bridge.broadcast({ type: 'agent_tool', name: 'add_activity', args: { day_number: dayNum, title: st.name, time: times[sIdx] } })
-          await bridge.callBrowser('add_activity', {
-            day_number: dayNum,
+          dayActivities.push({
             title: st.name,
             type: st.category === 'nature' ? 'walk' : 'activity',
             time: times[sIdx],
@@ -1110,6 +1123,8 @@ export async function handleWorldwideInterview({
             notes: st.description,
           })
         }
+        bridge.broadcast({ type: 'agent_tool', name: 'add_day', args: { title, night: toTitleCase(city1.name) } })
+        await bridge.callBrowser('add_day', { title, night: toTitleCase(city1.name), activities: dayActivities })
         dayNum++
       }
 
@@ -1117,17 +1132,14 @@ export async function handleWorldwideInterview({
       for (let i = 0; i < daysCity2; i++) {
         const stops = optimizeDayRoute(clusters2[i % clusters2.length])
         const title = deriveDayTheme(dayNum, stops, toTitleCase(city2.name))
-        bridge.broadcast({ type: 'agent_tool', name: 'add_day', args: { title, night: toTitleCase(city2.name) } })
-        await bridge.callBrowser('add_day', { title, night: toTitleCase(city2.name) })
         const times = ['09:30', '12:30', '16:00', '19:00']
+        const dayActivities = []
         for (let sIdx = 0; sIdx < Math.min(stops.length, 4); sIdx++) {
           const st = stops[sIdx]
           const price = Math.round(curInfo.dailyBudget * 0.18)
           totalBudget += price
           totalStops++
-          bridge.broadcast({ type: 'agent_tool', name: 'add_activity', args: { day_number: dayNum, title: st.name, time: times[sIdx] } })
-          await bridge.callBrowser('add_activity', {
-            day_number: dayNum,
+          dayActivities.push({
             title: st.name,
             type: st.category === 'nature' ? 'walk' : 'activity',
             time: times[sIdx],
@@ -1138,10 +1150,31 @@ export async function handleWorldwideInterview({
             notes: st.description,
           })
         }
+        bridge.broadcast({ type: 'agent_tool', name: 'add_day', args: { title, night: toTitleCase(city2.name) } })
+        await bridge.callBrowser('add_day', { title, night: toTitleCase(city2.name), activities: dayActivities })
         dayNum++
       }
 
-      const summary = `I've created your multi-city itinerary for **${toTitleCase(city1.name)}** and **${toTitleCase(city2.name)}** with ${totalStops} curated stops! Total estimated budget is **${curInfo.symbol}${totalBudget} ${curInfo.code}**.`
+      let finalMultiBudget = totalBudget
+      let finalMultiCur = curInfo.code
+      let finalMultiSym = curInfo.symbol
+      try {
+        const tripSnap = await bridge.callBrowser('get_trip', {})
+        const snapData = tripSnap?.result?.result || tripSnap?.result || tripSnap
+        if (snapData?.budget?.total != null) finalMultiBudget = snapData.budget.total
+        if (snapData?.currency) {
+          finalMultiCur = snapData.currency
+          if (finalMultiCur === 'EUR') finalMultiSym = '€'
+          else if (finalMultiCur === 'INR') finalMultiSym = '₹'
+          else if (finalMultiCur === 'USD') finalMultiSym = '$'
+          else if (finalMultiCur === 'GBP') finalMultiSym = '£'
+          else if (finalMultiCur === 'JPY') finalMultiSym = '¥'
+        }
+      } catch {
+        /* fallback */
+      }
+
+      const summary = `I've created your multi-city itinerary for **${toTitleCase(city1.name)}** and **${toTitleCase(city2.name)}** with ${totalStops} curated stops! Total estimated budget is **${finalMultiSym}${finalMultiBudget} ${finalMultiCur}**.`
       await streamText(bridge, summary, abortSignal)
       bridge.broadcast({ type: 'assistant_text', text: summary })
       return true
@@ -1219,9 +1252,15 @@ export async function handleWorldwideInterview({
   }
 
   // 2. Open planner phase
-  bridge.broadcast({ type: 'agent_tool', name: 'start_planning', args: {} })
+  bridge.broadcast({ type: 'agent_tool', name: 'start_planning', args: { currency: cur, title: `Trip to ${titleCasedDest}` } })
   try {
-    await bridge.callBrowser('start_planning', {})
+    await bridge.callBrowser('start_planning', {
+      currency: cur,
+      title: `Trip to ${titleCasedDest}`,
+      destination: titleCasedDest,
+      car_gas_price: countryCode === 'us' ? 3.5 : 1.8,
+      car_gas_unit: countryCode === 'us' ? 'usd_gal' : 'eur_l',
+    })
   } catch (err) {
     console.error('[worldPlaces] start_planning error:', err)
   }
@@ -1252,13 +1291,6 @@ export async function handleWorldwideInterview({
     const dayCluster = clusters[(dayNum - 1) % clusters.length] || [rawAttractions[0]]
     const orderedStops = optimizeDayRoute(dayCluster, prevLastStop)
     const dayTitle = deriveDayTheme(dayNum, orderedStops, titleCasedDest)
-
-    bridge.broadcast({ type: 'agent_tool', name: 'add_day', args: { title: dayTitle, night: titleCasedDest } })
-    try {
-      await bridge.callBrowser('add_day', { title: dayTitle, night: titleCasedDest })
-    } catch (err) {
-      console.error('[worldPlaces] add_day error:', err)
-    }
 
     const times = ['09:30', '12:30', '16:00', '19:00']
     const dayActivities = []
@@ -1316,27 +1348,13 @@ export async function handleWorldwideInterview({
       usedCoords.add(coordKey)
       act.lat = stopLat
       act.lng = stopLng
+    }
 
-      bridge.broadcast({
-        type: 'agent_tool',
-        name: 'add_activity',
-        args: { day_number: dayNum, title: act.title, time: act.time, duration_min: act.duration_min },
-      })
-      try {
-        await bridge.callBrowser('add_activity', {
-          day_number: dayNum,
-          title: act.title,
-          type: act.type,
-          time: act.time,
-          duration_min: act.duration_min,
-          lat: act.lat,
-          lng: act.lng,
-          price: act.price,
-          notes: act.notes,
-        })
-      } catch (err) {
-        console.error('[worldPlaces] add_activity error:', err)
-      }
+    bridge.broadcast({ type: 'agent_tool', name: 'add_day', args: { title: dayTitle, night: titleCasedDest } })
+    try {
+      await bridge.callBrowser('add_day', { title: dayTitle, night: titleCasedDest, activities: dayActivities })
+    } catch (err) {
+      console.error('[worldPlaces] add_day error:', err)
     }
 
     if (orderedStops.length > 0) {
@@ -1372,9 +1390,31 @@ export async function handleWorldwideInterview({
     /* ignore */
   }
 
+  let finalBudget = totalEstimatedBudget
+  let finalCur = cur
+  let finalSym = sym
+  try {
+    const tripSnap = await bridge.callBrowser('get_trip', {})
+    const snapData = tripSnap?.result?.result || tripSnap?.result || tripSnap
+    if (snapData?.budget?.total != null) {
+      finalBudget = snapData.budget.total
+    }
+    if (snapData?.currency) {
+      finalCur = snapData.currency
+      if (finalCur === 'EUR') finalSym = '€'
+      else if (finalCur === 'INR') finalSym = '₹'
+      else if (finalCur === 'USD') finalSym = '$'
+      else if (finalCur === 'GBP') finalSym = '£'
+      else if (finalCur === 'JPY') finalSym = '¥'
+      else finalSym = `${finalCur} `
+    }
+  } catch {
+    /* fallback to calculated budget */
+  }
+
   const finalReply = isIt
-    ? `Ho completato il tuo itinerario per **${titleCasedDest}** (${daysCount} giorni, ${totalStopsCount} attrazioni e tappe gastronomiche)! Il budget stimato complessivo è di circa **${sym}${totalEstimatedBudget} ${cur}**.`
-    : `I've created your ${daysCount}-day personalized itinerary for **${titleCasedDest}** with ${totalStopsCount} curated attractions and dining spots! Estimated total budget is **${sym}${totalEstimatedBudget} ${cur}** (~${sym}${Math.round(totalEstimatedBudget / daysCount)}/day).`
+    ? `Ho completato il tuo itinerario per **${titleCasedDest}** (${daysCount} giorni, ${totalStopsCount} attrazioni e tappe gastronomiche)! Il budget stimato complessivo è di circa **${finalSym}${finalBudget} ${finalCur}**.`
+    : `I've created your ${daysCount}-day personalized itinerary for **${titleCasedDest}** with ${totalStopsCount} curated attractions and dining spots! Estimated total budget is **${finalSym}${finalBudget} ${finalCur}** (~${finalSym}${Math.round(finalBudget / daysCount)}/day).`
 
   await streamText(bridge, finalReply, abortSignal)
   bridge.broadcast({ type: 'assistant_text', text: finalReply })

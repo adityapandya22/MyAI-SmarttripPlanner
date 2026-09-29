@@ -49,6 +49,8 @@ async function runTestQuery(query) {
   const metaCall = calledTools.find((c) => c.name === 'set_trip_meta')
   const days = calledTools.filter((c) => c.name === 'add_day')
   const activities = calledTools.filter((c) => c.name === 'add_activity')
+  const dayActivities = days.flatMap((d) => d.args?.activities || [])
+  const allActivities = [...activities.map((a) => a.args), ...dayActivities]
   const textEvents = broadcastEvents.filter((e) => e.type === 'assistant_text')
   const lastReply = textEvents.map((e) => e.text).join('\n')
 
@@ -56,8 +58,8 @@ async function runTestQuery(query) {
     query,
     meta: metaCall?.args || null,
     daysCount: days.length,
-    stopsCount: activities.length,
-    activities: activities.map((a) => a.args),
+    stopsCount: allActivities.length,
+    activities: allActivities,
     lastReply,
   }
 }

@@ -306,8 +306,11 @@ describe('World Places Service & DSA Algorithms', () => {
       const dayCalls = calledTools.filter((c) => c.name === 'add_day')
       expect(dayCalls.length).toBe(4)
 
+      const totalStops = dayCalls.reduce((s, d) => s + (d.args.activities?.length || 0), 0)
+      expect(totalStops).toBeGreaterThanOrEqual(12)
+
       const actCalls = calledTools.filter((c) => c.name === 'add_activity')
-      expect(actCalls.length).toBeGreaterThanOrEqual(12)
+      expect(actCalls.length).toBe(0)
 
       const textEvent = broadcastEvents.find(
         (e) => e.type === 'assistant_text' && e.text.includes('Paris') && e.text.includes('EUR'),
@@ -518,6 +521,117 @@ describe('World Places Service & DSA Algorithms', () => {
       const metaCall = calledTools.find((c) => c.name === 'set_trip_meta')
       expect(metaCall).toBeTruthy()
       expect(metaCall.args.currency).toBe('JPY')
+    })
+
+    it('asks "Which city in Spain?" when user enters country Spain and does not build trip', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockImplementation(async (url) => {
+          const urlStr = String(url)
+          if (urlStr.includes('nominatim.openstreetmap.org')) {
+            return {
+              ok: true,
+              json: async () => [
+                {
+                  name: 'Spain',
+                  display_name: 'Spain',
+                  lat: '39.3260',
+                  lon: '-4.8379',
+                  importance: 0.93,
+                  category: 'boundary',
+                  type: 'administrative',
+                  addresstype: 'country',
+                  address: { country_code: 'es' },
+                },
+              ],
+            }
+          }
+          return { ok: false }
+        }),
+      )
+
+      const calledTools = []
+      const broadcastEvents = []
+      const mockBridge = {
+        broadcast: (ev) => broadcastEvents.push(ev),
+        callBrowser: async (name, args) => {
+          calledTools.push({ name, args })
+          return { ok: true, result: {} }
+        },
+      }
+
+      await runFreeAgent('Spain', {
+        mode: 'interview',
+        bridge: mockBridge,
+        abortSignal: new AbortController().signal,
+      })
+
+      // Must NOT build days or stops for country query
+      const dayCalls = calledTools.filter((c) => c.name === 'add_day')
+      expect(dayCalls.length).toBe(0)
+
+      const textEvent = broadcastEvents.find((e) => e.type === 'assistant_text')
+      expect(textEvent).toBeTruthy()
+      expect(textEvent.text).toContain('Which city in')
+      expect(textEvent.text).toContain('Spain')
+      expect(textEvent.text).toContain('Barcelona')
+    })
+
+    it('ensures agent final message and budget widget agree on currency and total', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockImplementation(async (url) => {
+          const urlStr = String(url)
+          if (urlStr.includes('nominatim.openstreetmap.org')) {
+            return {
+              ok: true,
+              json: async () => [
+                {
+                  name: 'Barcelona',
+                  display_name: 'Barcelona, Catalonia, Spain',
+                  lat: '41.3851',
+                  lon: '2.1734',
+                  importance: 0.91,
+                  type: 'city',
+                  address: { country_code: 'es' },
+                },
+              ],
+            }
+          }
+          return { ok: false, status: 500 }
+        }),
+      )
+
+      const broadcastEvents = []
+      const mockBridge = {
+        broadcast: (ev) => broadcastEvents.push(ev),
+        callBrowser: async (name, _args) => {
+          if (name === 'get_trip') {
+            return {
+              ok: true,
+              result: {
+                currency: 'EUR',
+                budget: { items: 312, fuel: 64, total: 376, currency: 'EUR' },
+              },
+            }
+          }
+          return { ok: true, result: {} }
+        },
+      }
+
+      await runFreeAgent('Barcelona 3 days', {
+        mode: 'interview',
+        bridge: mockBridge,
+        abortSignal: new AbortController().signal,
+      })
+
+      const textEvent = broadcastEvents.find(
+        (e) => e.type === 'assistant_text' && e.text.includes('Estimated total budget is'),
+      )
+      expect(textEvent).toBeTruthy()
+      // Message must show €376 EUR, exactly agreeing with the widget store budget total
+      expect(textEvent.text).toContain('€376 EUR')
+      expect(textEvent.text).not.toContain('₹')
     })
   })
 })

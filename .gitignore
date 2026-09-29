@@ -13,6 +13,7 @@ docs/going-public-plan.md
 HANDOFF.md
 prompt*.txt
 FINAL COMPLETION
+fixingprompt
 
 # local user data and secrets — never commit
 /data/
