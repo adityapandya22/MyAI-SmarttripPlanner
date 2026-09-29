@@ -98,7 +98,7 @@ export default function MapPanel() {
         {/* re-fit when the filter changes OR any stops are added/moved */}
         <FitOnChange
           coords={allCoords}
-          depKey={`${mapFilter ?? 'all'}|${fitNonce}|${allCoords.length}|${allCoords.map((c) => `${c[0]?.toFixed(2)},${c[1]?.toFixed(2)}`).join(';')}`}
+          depKey={coordsDepKey}
         />
         <FlyToConsumer markerRefs={markerRefs} />
         <PickConsumer />

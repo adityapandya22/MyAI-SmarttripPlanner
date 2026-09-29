@@ -22,7 +22,6 @@ export {
  */
 export function getProviderMode(override) {
   if (override) return String(override).toLowerCase() === 'mock' ? 'mock' : 'live'
-  if (typeof process !== 'undefined' && (process.env.NODE_ENV === 'test' || process.env.VITEST)) return 'mock'
   const envMode = String(process.env.ULISSE_PLACES_PROVIDER ?? '').trim().toLowerCase()
   return envMode === 'mock' ? 'mock' : 'live'
 }

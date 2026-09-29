@@ -10,7 +10,6 @@
 import { z } from 'zod'
 import { TOOL_DEFS, makeToolHandler } from './tools.mjs'
 import { findDestination } from './destination.mjs'
-import { getHotelProvider, getRestaurantProvider, getProviderMode } from './providers/index.mjs'
 
 // Re-export for backwards compatibility (tests import directly from this file)
 export { findDestination } from './destination.mjs'
@@ -89,22 +88,6 @@ export function getAttractionTags(item) {
   if (/market|bazaar|flea|craft|shopping|street|spice/i.test(text)) tags.add('market')
   if (/cultural|dance|art|folk|cruise|music/i.test(text)) tags.add('culture')
   return tags
-}
-
-/** Generate guaranteed distinct coordinates with deterministic tiny offsets */
-function getDistinctCoords(usedCoords, lat, lng) {
-  let cLat = Number(Number(lat).toFixed(4))
-  let cLng = Number(Number(lng).toFixed(4))
-  let key = `${cLat},${cLng}`
-  let step = 1
-  while (usedCoords.has(key)) {
-    cLat = Number((Number(lat) + step * 0.0035).toFixed(4))
-    cLng = Number((Number(lng) - step * 0.0028).toFixed(4))
-    key = `${cLat},${cLng}`
-    step++
-  }
-  usedCoords.add(key)
-  return { lat: cLat, lng: cLng }
 }
 
 /** Day title templates for varied multi-day itineraries */
