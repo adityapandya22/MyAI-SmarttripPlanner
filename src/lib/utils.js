@@ -51,6 +51,13 @@ export function gmapsUrl(lat, lng) {
   return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
 }
 
+export function toTitleCase(str = '') {
+  if (!str) return ''
+  return String(str)
+    .trim()
+    .replace(/\b[a-zA-Z]/g, (c) => c.toUpperCase())
+}
+
 export function fmtMoney(v, currency = 'INR') {
   const locale = currency === 'INR' ? 'en-IN' : intlLocale()
   return new Intl.NumberFormat(locale, {

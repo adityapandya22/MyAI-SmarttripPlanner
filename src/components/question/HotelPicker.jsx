@@ -46,7 +46,7 @@ export default function HotelPicker({ data, onChoose }) {
 
 function HotelOption({ o, trip, onPick }) {
   const { t, i18n } = useTranslation()
-  const cur = o.currency ?? 'EUR'
+  const cur = o.currency ?? 'INR'
   const setPlacePreview = useUI((s) => s.setPlacePreview)
   const hasCoords = o.lat != null && o.lng != null
 

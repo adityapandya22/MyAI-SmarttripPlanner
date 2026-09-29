@@ -110,7 +110,8 @@ export function scoreDestination(text, s) {
 
   // Full attraction names only (no first-word tricks)
   for (const attraction of s.topAttractions ?? []) {
-    if (hasWord(q, norm(attraction))) score += 40
+    const attName = typeof attraction === 'string' ? attraction : attraction?.name
+    if (attName && hasWord(q, norm(attName))) score += 40
   }
 
   return score

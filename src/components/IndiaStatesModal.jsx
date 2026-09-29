@@ -42,7 +42,7 @@ export default function IndiaStatesModal({ onClose }) {
         sugStateIds.has(item.id) ||
         item.name.toLowerCase().includes(q) ||
         item.capital.toLowerCase().includes(q) ||
-        item.topAttractions.some((a) => a.toLowerCase().includes(q)) ||
+        item.topAttractions.some((a) => (typeof a === 'string' ? a : a.name).toLowerCase().includes(q)) ||
         item.tagline.toLowerCase().includes(q)
       )
     })
@@ -235,15 +235,18 @@ export default function IndiaStatesModal({ onClose }) {
                     <div className="mt-3">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-ink-400 mb-1">Top Highlights</p>
                       <div className="flex flex-wrap gap-1">
-                        {item.topAttractions.slice(0, 3).map((att) => (
-                          <span
-                            key={att}
-                            className="inline-block rounded-md bg-ink-100/70 px-1.5 py-0.5 text-[10px] font-medium text-ink-700 truncate max-w-[200px]"
-                            title={att}
-                          >
-                            {att}
-                          </span>
-                        ))}
+                        {item.topAttractions.slice(0, 3).map((att) => {
+                          const name = typeof att === 'string' ? att : att.name
+                          return (
+                            <span
+                              key={name}
+                              className="inline-block rounded-md bg-ink-100/70 px-1.5 py-0.5 text-[10px] font-medium text-ink-700 truncate max-w-[200px]"
+                              title={name}
+                            >
+                              {name}
+                            </span>
+                          )
+                        })}
                         {item.topAttractions.length > 3 && (
                           <span className="text-[10px] text-ink-400 font-semibold self-center">
                             +{item.topAttractions.length - 3} more

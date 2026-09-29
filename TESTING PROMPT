@@ -64,6 +64,7 @@ hashLocationToCoords() puts every place at lat 40–50, lng 10–20(Europe) and 
 6. FULL BUG SWEEP(as a tester)
    Audit and fix: console errors, unhandled promise rejections, fetches without try/catch, missing loading/empty / error states, effect cleanup leaks, mobile layout issues, invalid JSON import /export (use the zod TripSchema plan from prompt.txt in server/storage.mjs), ErrorBoundary coverage around the map and chat panels, and README / env -var accuracy.Also remove unused code and fix every eslint warning.
 
+   
 7. TESTS(Vitest; config exists)
    Add tests for: himachal, "Himachal Pradesh", manali, shimla, goa, "old manali"(must NOT return Goa), "fort tour"(must return null), kerala, leh ladakh, typos, empty string, extra whitespace, mixed case, special characters, very long input, non - English input, rapid consecutive searches, cache hit vs miss, Trie behaviour, capital parsing, keyword false positives("great"), and mock providers returning INR + in -India coordinates.Add a regression test named "does not return Goa for generic words".Assert that coordinates fall inside the expected region(Himachal roughly lat 30.4–33.2, lng 75.6–79.0).
 

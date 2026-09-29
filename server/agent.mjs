@@ -260,6 +260,10 @@ export function createAgent(bridge, { mcpPort, auth }) {
           if (isAuth) {
             console.log('[agent] Codex auth issue detected. Seamlessly serving trip with Free AI Agent.')
             child.kill('SIGTERM')
+            bridge.broadcast({
+              type: 'assistant_text',
+              text: 'Using the free planner; add an API key in Admin for smarter plans.\n\n',
+            })
             runFreeAgent(text, { model, sessionId, mode, notes, currency, language, bridge }).finally(resolve)
             return
           }
@@ -274,6 +278,10 @@ export function createAgent(bridge, { mcpPort, auth }) {
             if (isAuth) {
               console.log('[agent] Codex turn auth failure. Seamlessly serving trip with Free AI Agent.')
               child.kill('SIGTERM')
+              bridge.broadcast({
+                type: 'assistant_text',
+                text: 'Using the free planner; add an API key in Admin for smarter plans.\n\n',
+              })
               runFreeAgent(text, { model, sessionId, mode, notes, currency, language, bridge }).finally(resolve)
               return
             }
@@ -321,6 +329,10 @@ export function createAgent(bridge, { mcpPort, auth }) {
         active = { abort: () => abort.abort() }
         const apiKey = msg.apiKey || auth?.getGeminiKey?.() || process.env.GEMINI_API_KEY
         if (!apiKey) {
+          bridge.broadcast({
+            type: 'assistant_text',
+            text: 'Using the free planner; add an API key in Admin for smarter plans.\n\n',
+          })
           await runFreeAgent(msg.text, { ...msg, bridge, abortSignal: abort.signal })
         } else {
           await runOpenAiCompat(msg.text, {
@@ -337,6 +349,10 @@ export function createAgent(bridge, { mcpPort, auth }) {
         active = { abort: () => abort.abort() }
         const apiKey = msg.apiKey || auth?.getGroqKey?.() || process.env.GROQ_API_KEY
         if (!apiKey) {
+          bridge.broadcast({
+            type: 'assistant_text',
+            text: 'Using the free planner; add an API key in Admin for smarter plans.\n\n',
+          })
           await runFreeAgent(msg.text, { ...msg, bridge, abortSignal: abort.signal })
         } else {
           await runOpenAiCompat(msg.text, {
@@ -363,6 +379,10 @@ export function createAgent(bridge, { mcpPort, auth }) {
       try {
         const abort = new AbortController()
         active = { abort: () => abort.abort() }
+        bridge.broadcast({
+          type: 'assistant_text',
+          text: 'Using the free planner; add an API key in Admin for smarter plans.\n\n',
+        })
         await runFreeAgent(msg.text, { ...msg, bridge, abortSignal: abort.signal })
       } catch (fallbackErr) {
         bridge.broadcast({

@@ -13,6 +13,7 @@ import Markdown from './Markdown'
 import QuestionCard, { QARecord, HotelPickRecord, RestaurantPickRecord } from './QuestionCard'
 import MentionInput from './MentionInput'
 import { TOOL_META, groupMessages, ToolChipGroup, ModelPicker, AgentAvatar } from './chatShared'
+import { MAP_TILE_CONFIG } from '../lib/mapTiles'
 
 /* conversation starters for the empty chat: built from the ACTUAL trip
    (real night localities, the fullest day) plus evergreen ones — never a
@@ -431,7 +432,7 @@ function MiniMap({ dayNumber, highlight }) {
         keyboard={false}
         className="h-full w-full"
       >
-        <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" subdomains="abcd" />
+        <TileLayer url={MAP_TILE_CONFIG.url} maxZoom={MAP_TILE_CONFIG.maxZoom} />
         {coords.length > 1 && (
           <Polyline positions={coords} pathOptions={{ color: day?.color ?? '#f59e0b', weight: 3, opacity: 0.75 }} />
         )}

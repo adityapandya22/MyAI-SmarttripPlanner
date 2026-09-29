@@ -131,7 +131,8 @@ export function buildDestinationTrie(INDIA_STATES, ALIASES = {}) {
 
     // Top attraction names
     for (const att of s.topAttractions || []) {
-      trie.insert(norm(att), meta)
+      const name = typeof att === 'string' ? att : att?.name
+      if (name) trie.insert(norm(name), meta)
     }
   }
 

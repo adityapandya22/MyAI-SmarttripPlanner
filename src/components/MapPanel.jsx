@@ -13,6 +13,7 @@ import PinMarker from './map/PinMarker'
 import PlacePreviewMarker from './map/PlacePreviewMarker'
 import SearchOverlay from './map/SearchOverlay'
 import LegChip from './map/LegChip'
+import { MAP_TILE_CONFIG } from '../lib/mapTiles'
 import {
   MapAutosize,
   MapRef,
@@ -74,10 +75,9 @@ export default function MapPanel() {
         className="h-full w-full"
       >
         <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          subdomains="abcd"
-          maxZoom={19}
+          url={MAP_TILE_CONFIG.url}
+          attribution={MAP_TILE_CONFIG.attribution}
+          maxZoom={MAP_TILE_CONFIG.maxZoom}
         />
         <MapAutosize />
         <MapRef mapRef={mapRef} />
@@ -88,11 +88,10 @@ export default function MapPanel() {
           hasStops={layersAll.some((l) => l.points.length > 0)}
           tripId={trip.id}
         />
-        {/* re-fit when the filter changes OR the trip's anchor point moves
-            (e.g. the agent starts building a brand-new destination) */}
+        {/* re-fit when the filter changes OR any stops are added/moved */}
         <FitOnChange
           coords={allCoords}
-          depKey={`${mapFilter ?? 'all'}|${fitNonce}|${allCoords[0] ? allCoords[0].map((v) => v.toFixed(1)).join(',') : 'none'}`}
+          depKey={`${mapFilter ?? 'all'}|${fitNonce}|${allCoords.length}|${allCoords.map((c) => `${c[0]?.toFixed(2)},${c[1]?.toFixed(2)}`).join(';')}`}
         />
         <FlyToConsumer markerRefs={markerRefs} />
         <PickConsumer />

@@ -38,7 +38,11 @@ export function FitOnChange({ coords, depKey }) {
 
   useEffect(() => {
     if (coordsRef.current.length && map.getSize().x > 50) {
-      map.fitBounds(coordsRef.current, { padding: [48, 48] })
+      if (coordsRef.current.length === 1) {
+        map.setView(coordsRef.current[0], 12)
+      } else {
+        map.fitBounds(coordsRef.current, { padding: [48, 48], maxZoom: 15 })
+      }
     }
   }, [depKey, map])
 
@@ -46,7 +50,11 @@ export function FitOnChange({ coords, depKey }) {
     const onResize = (e) => {
       const wasHidden = !e.oldSize || e.oldSize.x < 50
       if (wasHidden && e.newSize.x >= 50 && coordsRef.current.length) {
-        map.fitBounds(coordsRef.current, { padding: [48, 48] })
+        if (coordsRef.current.length === 1) {
+          map.setView(coordsRef.current[0], 12)
+        } else {
+          map.fitBounds(coordsRef.current, { padding: [48, 48], maxZoom: 15 })
+        }
       }
     }
     map.on('resize', onResize)

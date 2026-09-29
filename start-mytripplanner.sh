@@ -18,3 +18,4 @@ else
 fi
 sleep 1
 xdg-open "http://localhost:5200" 2>/dev/null || echo "Open http://localhost:5200 in your browser."
+

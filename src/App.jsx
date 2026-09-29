@@ -21,6 +21,7 @@ import Dashboard from './components/Dashboard'
 import ConfirmDialog from './components/ConfirmDialog'
 import Toast from './components/Toast'
 import ErrorBoundary from './components/ErrorBoundary'
+import { toTitleCase } from './lib/utils'
 
 const isMobileNow = () => window.innerWidth < 1024
 
@@ -56,7 +57,7 @@ export default function App() {
   useEffect(() => { connectAgent(); if (import.meta.env.VITE_DEMO !== '1') startStorageSync() }, [])
 
   useEffect(() => {
-    document.title = activeId && tripTitle ? `${tripTitle} — ${APP_NAME}` : APP_NAME
+    document.title = activeId && tripTitle ? `${toTitleCase(tripTitle)} — ${APP_NAME}` : APP_NAME
   }, [activeId, tripTitle])
 
   /* mobile shell: bottom sheet over an always-visible map */
