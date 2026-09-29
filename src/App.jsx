@@ -22,7 +22,6 @@ import Dashboard from './components/Dashboard'
 import ConfirmDialog from './components/ConfirmDialog'
 import Toast from './components/Toast'
 import ErrorBoundary from './components/ErrorBoundary'
-import { toTitleCase } from './lib/utils'
 
 const isMobileNow = () => window.innerWidth < 1024
 
@@ -177,9 +176,8 @@ export default function App() {
                   <button
                     onClick={() => setChatOpen(true)}
                     aria-label={t('header.aiAssistant')}
-                    className={`grid size-14 place-items-center rounded-full bg-violet-600 text-white shadow-xl shadow-violet-600/40 transition-all duration-300 active:scale-95 ${
-                      sheet === 'full' ? 'pointer-events-none scale-50 opacity-0' : ''
-                    }`}
+                    className={`grid size-14 place-items-center rounded-full bg-violet-600 text-white shadow-xl shadow-violet-600/40 transition-all duration-300 active:scale-95 ${sheet === 'full' ? 'pointer-events-none scale-50 opacity-0' : ''
+                      }`}
                   >
                     <Bot size={24} />
                     {(thinking || pendingQuestion) && (
@@ -285,9 +283,8 @@ function TabBtn({ active, onClick, Icon, label }) {
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-2 rounded-t-xl border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
-        active ? 'border-brand-500 text-brand-600' : 'border-transparent text-ink-500 hover:text-ink-700'
-      }`}
+      className={`flex items-center gap-2 rounded-t-xl border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${active ? 'border-brand-500 text-brand-600' : 'border-transparent text-ink-500 hover:text-ink-700'
+        }`}
     >
       <Icon size={16} strokeWidth={2.4} />
       {label}

@@ -315,7 +315,6 @@ export function createAgent(bridge, { mcpPort, auth }) {
     try { return JSON.parse(a) } catch { return {} }
   }
 
-export const FREE_FALLBACK_NOTICE = 'Using the free planner; add an API key in Admin for smarter plans'
 
   /* ---------- dispatch ---------- */
   async function runTurn(msg) {
