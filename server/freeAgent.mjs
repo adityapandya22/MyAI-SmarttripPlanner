@@ -10,6 +10,14 @@
 import { z } from 'zod'
 import { TOOL_DEFS, makeToolHandler } from './tools.mjs'
 import { findDestination } from './destination.mjs'
+import {
+  handleWorldwideInterview,
+  isWorldPlacesEnabled,
+  geocodeWorldwide,
+  resolveCandidates,
+  getCurrencyForCountry,
+  normalizeQuery,
+} from './worldPlaces.mjs'
 
 // Re-export for backwards compatibility (tests import directly from this file)
 export { findDestination } from './destination.mjs'
@@ -214,11 +222,26 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
 
     // TASK 2: If destination is unknown, ask instead of silently falling back
     if (!matchedState) {
+      if (isWorldPlacesEnabled()) {
+        const handled = await handleWorldwideInterview({
+          text,
+          userDays: parseDaysFromText(text),
+          bridge,
+          abortSignal,
+          startDate,
+          isIt,
+          streamText,
+          deriveDateStr,
+          toTitleCase,
+        })
+        if (handled) return
+      }
+
       // Try to extract a raw place name from the text (stop at connector words)
       const rawPlace = text.match(/\bto\s+([A-Za-z]+(?:\s+[A-Za-z]+){0,3})(?=\s+(?:for|with|in|on|and|by|via|from|\d)|$)/i)?.[1]?.trim()
       const clarificationMsg = rawPlace
-        ? `I couldn't find "${rawPlace}" in my India destination database. Which destination did you mean? For example, try "Himachal Pradesh", "Manali", "Goa", or "Kerala".`
-        : `Which destination did you mean? Please name a specific Indian state, city, or landmark — for example "Rajasthan", "Manali", "Kerala backwaters".`
+        ? `I couldn't find "${rawPlace}". Which destination did you mean? Please name a specific city or region (e.g. "Paris", "Tokyo", "Rajasthan", "Goa").`
+        : `Which destination did you mean? Please name a specific city or region — for example "Paris", "Tokyo", "Rajasthan", "Goa".`
 
       await streamText(bridge, clarificationMsg, abortSignal, 12)
       bridge.broadcast({ type: 'assistant_text', text: clarificationMsg })
@@ -485,42 +508,70 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
 
   // TASK 3b: Word-boundary safe intent checks
   if (intentMatches(text, 'food', 'eat', 'eating', 'restaurant', 'dining', 'dinner', 'lunch', 'breakfast', 'ristorante')) {
-    if (!matchedState) {
+    let loc = matchedState ? primaryCapital(matchedState.capital) : null
+    let activeCur = cur
+    if (!loc && isWorldPlacesEnabled()) {
+      const q = normalizeQuery(text).cleaned.replace(/restaurants?|food|dining|dinner|lunch|breakfast|ristorante/gi, '').trim()
+      if (q.length >= 2) {
+        const cands = await geocodeWorldwide(q, { signal: abortSignal })
+        const res = resolveCandidates(cands, q)
+        if (res.status === 'single') {
+          loc = res.result.name
+          const cInfo = getCurrencyForCountry(res.result.address?.country_code)
+          activeCur = cInfo.code
+        }
+      }
+    }
+
+    if (!loc) {
       const askMsg = 'Which destination did you mean? Please mention a specific city or state so I can recommend authentic dining spots.'
       await streamText(bridge, askMsg, abortSignal)
       bridge.broadcast({ type: 'assistant_text', text: askMsg })
       return
     }
-    const loc = primaryCapital(matchedState.capital)
     bridge.broadcast({ type: 'agent_tool', name: 'search_restaurants', args: { location: loc } })
     try {
-      await bridge.callBrowser('search_restaurants', { location: loc, query: 'local authentic', currency: cur })
+      await bridge.callBrowser('search_restaurants', { location: loc, query: 'local authentic', currency: activeCur })
     } catch {
       /* ignore */
     }
-    const reply = `I found top-rated authentic dining options in ${loc} with price ranges in ₹ INR. Check out the dining cards on your map!`
+    const reply = `I found top-rated authentic dining options in ${loc} with price ranges in ${activeCur}. Check out the dining cards on your map!`
     await streamText(bridge, reply, abortSignal)
     bridge.broadcast({ type: 'assistant_text', text: reply })
     return
   }
 
   if (intentMatches(text, 'hotel', 'hotels', 'stay', 'staying', 'accommodation', 'lodge', 'albergo')) {
-    if (!matchedState) {
+    let loc = matchedState ? primaryCapital(matchedState.capital) : null
+    let activeCur = cur
+    if (!loc && isWorldPlacesEnabled()) {
+      const q = normalizeQuery(text).cleaned.replace(/hotels?|stay|staying|accommodation|lodge|albergo/gi, '').trim()
+      if (q.length >= 2) {
+        const cands = await geocodeWorldwide(q, { signal: abortSignal })
+        const res = resolveCandidates(cands, q)
+        if (res.status === 'single') {
+          loc = res.result.name
+          const cInfo = getCurrencyForCountry(res.result.address?.country_code)
+          activeCur = cInfo.code
+        }
+      }
+    }
+
+    if (!loc) {
       const askMsg = 'Which destination did you mean? Please mention a specific city or state so I can search for verified accommodations.'
       await streamText(bridge, askMsg, abortSignal)
       bridge.broadcast({ type: 'assistant_text', text: askMsg })
       return
     }
-    const loc = primaryCapital(matchedState.capital)
     const checkin = deriveDateStr(startDate, 0)
     const checkout = deriveDateStr(startDate, 1)
-    bridge.broadcast({ type: 'agent_tool', name: 'search_hotels', args: { location: loc, currency: cur } })
+    bridge.broadcast({ type: 'agent_tool', name: 'search_hotels', args: { location: loc, currency: activeCur } })
     try {
-      await bridge.callBrowser('search_hotels', { location: loc, checkin, checkout, currency: cur })
+      await bridge.callBrowser('search_hotels', { location: loc, checkin, checkout, currency: activeCur })
     } catch {
       /* ignore */
     }
-    const reply = `I've retrieved verified accommodations in ${loc} with transparent per-night pricing in ₹ (${cur}).`
+    const reply = `I've retrieved verified accommodations in ${loc} with transparent per-night pricing in ${activeCur}.`
     await streamText(bridge, reply, abortSignal)
     bridge.broadcast({ type: 'assistant_text', text: reply })
     return

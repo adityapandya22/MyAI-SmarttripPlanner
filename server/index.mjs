@@ -12,6 +12,7 @@ import { createAgent, CODEX_BIN } from './agent.mjs'
 import { createAuth } from './auth.mjs'
 import { createMcpHandler } from './mcp-http.mjs'
 import { createStorage } from './storage.mjs'
+import { handleWorldPlacesHttp } from './worldPlaces.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.AGENT_PORT || 5200)
@@ -49,6 +50,7 @@ const storage = createStorage({ broadcast: (o) => bridge?.broadcast(o) })
 
 const http = createServer(async (req, res) => {
   if (await storage.handle(req, res)) return
+  if (await handleWorldPlacesHttp(req, res)) return
   if (req.url === '/mcp') {
     mcpHandler?.(req, res)
     return

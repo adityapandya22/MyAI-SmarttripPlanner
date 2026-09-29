@@ -76,6 +76,25 @@ function hashLocationToCoords(loc) {
   return { lat: Number(lat.toFixed(4)), lng: Number(lng.toFixed(4)) }
 }
 
+const WORLD_CITY_COORDS = {
+  paris: { lat: 48.8566, lng: 2.3522 },
+  london: { lat: 51.5074, lng: -0.1278 },
+  rome: { lat: 41.9028, lng: 12.4964 },
+  tokyo: { lat: 35.6762, lng: 139.6503 },
+  dubai: { lat: 25.2048, lng: 55.2708 },
+  'new york': { lat: 40.7128, lng: -74.0060 },
+  bali: { lat: -8.4095, lng: 115.1889 },
+}
+
+function getBaseCoords(loc, args) {
+  if (typeof args?.lat === 'number' && typeof args?.lng === 'number') {
+    return { lat: args.lat, lng: args.lng }
+  }
+  const low = loc.toLowerCase().trim()
+  if (WORLD_CITY_COORDS[low]) return WORLD_CITY_COORDS[low]
+  return hashLocationToCoords(loc)
+}
+
 /**
  * Mock restaurant search provider returning realistic India-centric fake data.
  * @implements {import('./types.mjs').RestaurantProvider}
@@ -96,7 +115,7 @@ export class MockRestaurantProvider {
     const searchUrl =
       'https://www.google.com/maps/search/' + encodeURIComponent(searchQuery) + '?hl=en'
 
-    const baseCoords = hashLocationToCoords(location)
+    const baseCoords = getBaseCoords(location, args)
 
     const places = SAMPLE_RESTAURANT_TEMPLATES.map((tmpl, idx) => {
       const name = what

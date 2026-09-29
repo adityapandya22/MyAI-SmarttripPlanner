@@ -297,7 +297,16 @@ If this project is useful to you, consider supporting its development:
 
 This repository is built upon the open-source project **[Prot10/MyTripPlanner](https://github.com/Prot10/MyTripPlanner)** created by Andrea Protani, licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. The original LICENSE file is preserved in this repository.
 
-### Key Custom Contributions & Enhancements
+- **Worldwide Keyless Destination Planning (`server/worldPlaces.mjs`)**: Plan multi-day road trips to any city or region across the globe using 100% free, keyless services. Features intelligent resolution order (India first, then global Nominatim geocoding), disambiguation for ambiguous locations (e.g. Paris, France vs Paris, Texas), country-vs-city detection with recommended cities, and multi-city route planning (e.g. "Kyoto and Osaka").
+- **DSA Route & Itinerary Optimization**:
+  - **Haversine Distance Matrix**: Pure mathematical spherical geometry distance calculations between coordinates without external API calls.
+  - **K-Means / Geographic Day Clustering**: Partitions dozens of verified tourist attractions into $N$ geographically cohesive daily clusters so travelers don't criss-cross cities.
+  - **Nearest Neighbor & 2-Opt TSP Route Optimizer**: Orders stops within each day to minimize road travel distance and eliminate self-intersecting loops.
+  - **SimpleLRUCache (24h TTL)**: Memory-bounded $O(1)$ LRU cache preventing duplicate network queries for geocoding and attractions.
+  - **Nominatim Rate Limiter**: Serialized 1 req/sec request queue respecting OpenStreetMap usage policies.
+- **Multi-Tier Attraction Fallback Chain**: Wikipedia Geosearch → Overpass API (OSM tourist POIs) → Bundled offline database (~40 major world destinations) → Honest unavailable notice (never hallucinates places or coordinates).
+- **Global Currency & Budget Engine**: Automatic currency, symbol, daily budget estimations, and fuel metric mappings across ~60 countries (USD, EUR, GBP, JPY, CAD, AUD, AED, etc.).
+- **Debounced Global Autocomplete (`src/components/Dashboard.jsx`)**: Responsive 400ms debounced typeahead suggestions combining the India Trie and worldwide geocoder with cancel-on-keystroke and empty state handling.
 - **India Travel Dataset (`src/data/indiaStates.js`)**: All 28 Indian States and 8 Union Territories with verified geographical centres, capitals, suggested itineraries, curated top attractions, and regional categorization (`INDIA_REGIONS`).
 - **Scored Whole-Word Destination Matcher (`server/destination.mjs`)**: Scored matching algorithm with word-boundary checks, comprehensive alias mappings, and confidence thresholding to prevent false positives (e.g. "great" never matches "eat", "Old Manali" never falsely matches Goa, and unrecognised queries ask "Which destination did you mean?" instead of silently defaulting to Jaipur).
 - **Trie Prefix Autocomplete Engine (`src/lib/trie.js`)**: Custom prefix tree data structure enabling instant autocomplete across states, capitals, aliases, and attractions, integrated directly into search inputs and the dashboard prompt.
@@ -305,6 +314,19 @@ This repository is built upon the open-source project **[Prot10/MyTripPlanner](h
 - **India-Centric Mock Providers (`server/providers/`)**: Mock hotel and dining providers updated with deterministic India-bounded coordinate generation and native Indian Rupee (₹ INR) pricing.
 - **Geocoding & Place Search Hardening (`src/lib/geo.js`)**: Normalized caching, AbortController timeout handling, request ID anti-stale protection, and automatic country code scoping (`countrycodes=in`).
 - **Zod Schema Validation & Error Boundaries (`server/storage.mjs`, `src/components/ErrorBoundary.jsx`)**: Robust runtime validation with Zod `TripSchema` and resilient React error boundaries around Map, Chat, and Itinerary views.
+
+### Free Services, Fair Use & Attribution
+- **OpenStreetMap & Nominatim**: Map data and geocoding courtesy of [OpenStreetMap](https://www.openstreetmap.org/) contributors, licensed under the Open Database License (ODbL). All Nominatim queries strictly adhere to the [Nominatim Usage Policy](https://operations.osmfoundation.org/policies/nominatim/) (max 1 request/second serialized rate limit, descriptive User-Agent, and client-side 24-hour LRU caching).
+- **Wikipedia API**: Geographical attraction information and article snippets courtesy of Wikimedia Foundation, licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+- **Overpass API**: OpenStreetMap point-of-interest data queried via public Overpass endpoints with automated timeout guards and offline bundled backups.
+- **OSRM (Open Source Routing Machine)**: Driving road routes and distances calculated over OpenStreetMap road networks.
+
+### Environment Configuration
+| Variable | Default | Description |
+|---|---|---|
+| `WORLD_PLACES_ENABLED` | `1` | Set to `0` to disable worldwide resolution and restrict queries strictly to India datasets. |
+| `NOMINATIM_EMAIL` | *(optional)* | Contact email sent in the `User-Agent` header for Nominatim requests per OSM Foundation guidelines. |
+| `PORT` | `3001` | Server HTTP and WebSocket listener port. |
 
 ## License
 

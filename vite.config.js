@@ -8,6 +8,9 @@ export default defineConfig({
     port: 5199,
     /* storage refs are relative URLs (/storage/images/...): in dev they
        must reach the agent server on 5200 (or VITE_AGENT_PORT) */
-    proxy: { '/storage': `http://localhost:${process.env.VITE_AGENT_PORT ?? 5200}` },
+    proxy: {
+      '/storage': `http://localhost:${process.env.VITE_AGENT_PORT ?? 5200}`,
+      '/api': `http://localhost:${process.env.VITE_AGENT_PORT ?? 5200}`,
+    },
   },
 })

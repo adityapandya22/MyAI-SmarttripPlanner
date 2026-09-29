@@ -83,6 +83,25 @@ function hashLocationToCoords(loc) {
   return { lat: Number(lat.toFixed(4)), lng: Number(lng.toFixed(4)) }
 }
 
+const WORLD_CITY_COORDS = {
+  paris: { lat: 48.8566, lng: 2.3522 },
+  london: { lat: 51.5074, lng: -0.1278 },
+  rome: { lat: 41.9028, lng: 12.4964 },
+  tokyo: { lat: 35.6762, lng: 139.6503 },
+  dubai: { lat: 25.2048, lng: 55.2708 },
+  'new york': { lat: 40.7128, lng: -74.0060 },
+  bali: { lat: -8.4095, lng: 115.1889 },
+}
+
+function getBaseCoords(loc, args) {
+  if (typeof args?.lat === 'number' && typeof args?.lng === 'number') {
+    return { lat: args.lat, lng: args.lng }
+  }
+  const low = loc.toLowerCase().trim()
+  if (WORLD_CITY_COORDS[low]) return WORLD_CITY_COORDS[low]
+  return hashLocationToCoords(loc)
+}
+
 /**
  * Mock hotel search provider returning realistic fake data without network/browser.
  * @implements {import('./types.mjs').HotelProvider}
@@ -108,7 +127,7 @@ export class MockHotelProvider {
     const nights = Math.round((new Date(checkout) - new Date(checkin)) / 86_400_000)
     if (nights < 1) throw new Error('checkout deve essere successivo a checkin.')
 
-    const baseCoords = hashLocationToCoords(location)
+    const baseCoords = getBaseCoords(location, args)
     const searchUrl =
       'https://www.booking.com/searchresults.html?' +
       new URLSearchParams({

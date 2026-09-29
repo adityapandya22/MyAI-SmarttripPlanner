@@ -1,8 +1,8 @@
-import { useRef, useState, useMemo } from 'react'
+import { useRef, useState, useMemo, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Palmtree, Plus, Copy, Trash2, Upload, MapPin, CalendarDays, CarFront, ChevronRight, Route, Wallet,
-  ShieldCheck, Sparkles,
+  ShieldCheck, Sparkles, Globe,
 } from 'lucide-react'
 import { useTrip, useUI, toast } from '../store'
 import { tripStats, fmtDur, dayDate, fmtDate, fmtKm, fmtMoney, costByType, fuelCost, toTitleCase } from '../lib/utils'
@@ -34,6 +34,9 @@ export default function Dashboard() {
   const [showIndiaModal, setShowIndiaModal] = useState(false)
   const [showAdminModal, setShowAdminModal] = useState(false)
   const [consumerPrompt, setConsumerPrompt] = useState('')
+  const [worldSuggestions, setWorldSuggestions] = useState([])
+  const [isSearchingWorld, setIsSearchingWorld] = useState(false)
+  const [searchedQuery, setSearchedQuery] = useState('')
 
   const destTrie = useMemo(() => buildDestinationTrie(INDIA_STATES), [])
 
@@ -44,6 +47,43 @@ export default function Dashboard() {
     const lastWord = words[words.length - 1]
     return lastWord.length >= 2 ? destTrie.autocomplete(lastWord, 5) : destTrie.autocomplete(q, 5)
   }, [consumerPrompt, destTrie])
+
+  useEffect(() => {
+    const q = consumerPrompt.trim()
+    if (q.length < 2) {
+      setWorldSuggestions([])
+      setSearchedQuery('')
+      setIsSearchingWorld(false)
+      return
+    }
+
+    const controller = new AbortController()
+    setIsSearchingWorld(true)
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/places/search?q=${encodeURIComponent(q)}`, {
+          signal: controller.signal,
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setWorldSuggestions(data.candidates || [])
+          setSearchedQuery(q)
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          setWorldSuggestions([])
+        }
+      } finally {
+        setIsSearchingWorld(false)
+      }
+    }, 400)
+
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
+  }, [consumerPrompt])
 
   const handleConsumerQuickPlan = (prompt) => {
     const query = (prompt || consumerPrompt).trim()
@@ -174,15 +214,16 @@ export default function Dashboard() {
               </button>
             </form>
 
-            {/* Trie Destination Autocomplete Suggestions */}
-            {promptSuggestions.length > 0 && (
+            {/* Trie & Worldwide Destination Autocomplete Suggestions */}
+            {(promptSuggestions.length > 0 || worldSuggestions.length > 0) && (
               <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-xs anim-fade-in">
                 <span className="text-violet-200 text-[11px] font-semibold flex items-center gap-1">
                   <Sparkles size={12} className="text-amber-300" /> Autocomplete:
                 </span>
+                {/* India Trie suggestions */}
                 {promptSuggestions.map((sug, i) => (
                   <button
-                    key={i}
+                    key={`in-${i}`}
                     type="button"
                     onClick={() => {
                       const st = INDIA_STATES.find((s) => s.id === sug.meta?.stateId)
@@ -197,8 +238,39 @@ export default function Dashboard() {
                     )}
                   </button>
                 ))}
+                {/* Worldwide suggestions */}
+                {worldSuggestions.map((sug, i) => (
+                  <button
+                    key={`world-${i}`}
+                    type="button"
+                    onClick={() => {
+                      const fillText = `Plan a 5-day trip to ${sug.name} with top attractions and hotels`
+                      setConsumerPrompt(fillText)
+                    }}
+                    className="inline-flex items-center gap-1 rounded-lg bg-violet-400/25 hover:bg-violet-400/40 px-2.5 py-0.5 text-[11px] font-medium text-white transition backdrop-blur-md border border-white/20"
+                  >
+                    <Globe size={11} className="text-cyan-300" />
+                    <span>{sug.name}</span>
+                    {sug.display_name && (
+                      <span className="ml-1 max-w-[120px] truncate opacity-75 text-[10px]">
+                        ({sug.display_name.split(',').slice(1, 3).join(',').trim()})
+                      </span>
+                    )}
+                  </button>
+                ))}
               </div>
             )}
+
+            {/* No results state */}
+            {consumerPrompt.trim().length >= 2 &&
+              !isSearchingWorld &&
+              promptSuggestions.length === 0 &&
+              worldSuggestions.length === 0 &&
+              searchedQuery === consumerPrompt.trim() && (
+                <div className="mt-2 text-[11px] italic text-violet-200 anim-fade-in">
+                  No results for &ldquo;{consumerPrompt.trim()}&rdquo;. Please check the spelling or enter a city or landmark.
+                </div>
+              )}
 
             <div className="mt-3.5 flex flex-wrap items-center gap-2">
               <span className="text-[11px] font-semibold text-violet-200">Instant trip ideas:</span>
