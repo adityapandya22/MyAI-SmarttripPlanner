@@ -8,7 +8,7 @@ import {
 import { LANGS } from '../i18n/langs'
 import { useTrip, useUI, useRoutes, toast, activeTrip } from '../store'
 import { useAgentChat } from '../agent/socket'
-import { tripStats, fmtDur, fmtKm, fmtMoney, dayDate, fmtDate, fuelCost, costByType, tripUsesCar, GAS_UNITS } from '../lib/utils'
+import { tripStats, fmtDur, fmtKm, fmtMoney, dayDate, fmtDate, tripUsesCar, GAS_UNITS, tripTotalBudget } from '../lib/utils'
 import { refreshFx } from '../lib/fx'
 import { getTitleImage } from './ItemImage'
 import { chainedDayCoords, estimateDayKm } from '../lib/geo'
@@ -37,18 +37,19 @@ export default function Header() {
   const [, setFxReady] = useState(false)
   useEffect(() => { refreshFx().then(() => setFxReady(true)) }, [])
 
-  const stats = tripStats(trip)
-  const d0 = dayDate(trip.startDate, 0)
-  const dN = dayDate(trip.startDate, trip.days.length - 1)
-
   /* total km: real road distance where OSRM answered, estimate elsewhere */
   const totalKm = chainedDayCoords(trip).reduce(
     (s, l) => s + (roadKmByDay[l.dayId] ?? estimateDayKm(l.coords)), 0)
+  const stats = tripStats(trip, totalKm)
   const usesCar = tripUsesCar(trip)
-  const costs = costByType(trip)
-  const currency = trip.currency ?? 'INR'
-  const fuelUsd = usesCar ? fuelCost(totalKm, trip.car, currency) : 0
-  const totalUsd = costs.items + fuelUsd
+  const d0 = dayDate(trip.startDate, 0)
+  const dN = dayDate(trip.startDate, trip.days.length - 1)
+
+  const budgetInfo = tripTotalBudget(trip, totalKm)
+  const costs = budgetInfo
+  const currency = budgetInfo.currency
+  const fuelUsd = budgetInfo.fuel
+  const totalUsd = budgetInfo.total
 
   const onExport = async () => {
     /* inline IndexedDB photos so the shared file carries them */

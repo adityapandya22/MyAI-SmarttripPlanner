@@ -89,7 +89,7 @@ export const TOOL_DEFS = [
       subtitle: z.string().optional(),
       start_date: z.string().optional(),
       transport: z.enum(['car', 'walk', 'transit', 'mixed']).optional(),
-      currency: z.enum(['INR', 'EUR', 'USD']).optional().describe('valuta del viaggio: tutti i prezzi sono espressi in questa valuta'),
+      currency: z.string().optional().describe('valuta del viaggio: tutti i prezzi sono espressi in questa valuta'),
       car_model: z.string().optional(),
       car_l_per_100km: z.number().positive().optional(),
       car_gas_price: z.number().positive().optional(),

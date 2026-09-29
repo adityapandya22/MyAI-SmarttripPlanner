@@ -5,7 +5,7 @@ import {
   ShieldCheck, Sparkles, Globe,
 } from 'lucide-react'
 import { useTrip, useUI, toast } from '../store'
-import { tripStats, fmtDur, dayDate, fmtDate, fmtKm, fmtMoney, costByType, fuelCost, toTitleCase } from '../lib/utils'
+import { tripStats, fmtDur, dayDate, fmtDate, fmtKm, fmtMoney, toTitleCase, tripTotalBudget } from '../lib/utils'
 import { chainedDayCoords, estimateDayKm } from '../lib/geo'
 import { internTripImages } from '../lib/imgdb'
 import { useItemImages } from './ItemImage'
@@ -396,7 +396,7 @@ function TripCard({ trip, onOpen, onDuplicate, onDelete }) {
   const d0 = dayDate(trip.startDate, 0)
   const dN = dayDate(trip.startDate, trip.days.length - 1)
   const km = chainedDayCoords(trip).reduce((s, l) => s + estimateDayKm(l.coords), 0)
-  const budget = costByType(trip).items + fuelCost(km, trip.car, trip.currency ?? 'INR')
+  const budget = tripTotalBudget(trip, km).total
 
   /* cover: first located, non-drive stop */
   const cover = trip.days.flatMap((d) => d.items).find((i) => i.lat != null && i.type !== 'drive')

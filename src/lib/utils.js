@@ -36,11 +36,14 @@ export function dayDriveMin(day) {
   return day.items.filter((i) => i.type === 'drive').reduce((s, i) => s + (i.dur || 0), 0)
 }
 
-export function tripStats(trip) {
-  const stops = trip.days.reduce(
-    (s, d) => s + d.items.filter((i) => i.type !== 'drive' && i.type !== 'info').length, 0)
-  const driveMin = trip.days.reduce((s, d) => s + dayDriveMin(d), 0)
-  return { days: trip.days.length, stops, driveMin }
+export function tripStats(trip, totalKm = 0) {
+  const stops = trip?.days ? trip.days.reduce(
+    (s, d) => s + (d?.items || []).filter((i) => i.type !== 'drive' && i.type !== 'info').length, 0) : 0
+  let driveMin = trip?.days ? trip.days.reduce((s, d) => s + dayDriveMin(d), 0) : 0
+  if (driveMin === 0 && Number(totalKm) > 0) {
+    driveMin = Math.round((Number(totalKm) / 50) * 60)
+  }
+  return { days: trip?.days?.length || 0, stops, driveMin }
 }
 
 export function hostOf(url) {
@@ -116,6 +119,22 @@ export function costByType(trip) {
   }
   acc.items = acc.hotel + acc.food + acc.activity + acc.extra
   return acc
+}
+
+/* single source of truth for total budget: item costs + fuel estimate */
+export function tripTotalBudget(trip, totalKm = 0) {
+  const costs = costByType(trip)
+  const currency = trip?.currency ?? 'INR'
+  const usesCar = tripUsesCar(trip)
+  const fuel = usesCar ? fuelCost(totalKm, trip?.car, currency) : 0
+  const fuelRounded = Math.round(fuel)
+  const total = Math.round(costs.items + fuel)
+  return {
+    ...costs,
+    fuel: fuelRounded,
+    total,
+    currency,
+  }
 }
 
 export const TRANSPORT_MODES = ['car', 'walk', 'bus', 'train', 'plane', 'boat']

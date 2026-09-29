@@ -12,6 +12,7 @@ import {
   tripUsesCar,
   hostOf,
   fmtMoney,
+  tripTotalBudget,
 } from './utils'
 import { INDIA_STATES, INDIA_REGIONS } from '../data/indiaStates'
 
@@ -229,6 +230,47 @@ describe('budget and utility helpers', () => {
     expect(stats.days).toBe(2)
     expect(stats.stops).toBe(2) // 1 activity + 1 hotel
     expect(stats.driveMin).toBe(135) // 90 + 45
+  })
+
+  it('tripStats derives driving minutes from totalKm when no explicit drive items exist', () => {
+    const trip = {
+      days: [
+        {
+          items: [
+            { type: 'activity', dur: 60 },
+            { type: 'activity', dur: 90 },
+          ],
+        },
+      ],
+    }
+    // When totalKm is 0, driveMin is 0
+    expect(tripStats(trip, 0).driveMin).toBe(0)
+    // When totalKm is 50, driveMin is 60 min (derived at 50 km/h)
+    const stats = tripStats(trip, 50)
+    expect(stats.driveMin).toBe(60)
+    expect(fmtDur(stats.driveMin)).toBeTruthy()
+  })
+
+  it('tripTotalBudget provides single source of truth for items and fuel in trip currency', () => {
+    const trip = {
+      currency: 'EUR',
+      transport: 'car',
+      car: { lPer100: 8.0, gasPrice: 1.8, gasUnit: 'eur_l' },
+      days: [
+        {
+          items: [
+            { type: 'activity', price: 100 },
+            { type: 'food', price: 50 },
+          ],
+        },
+      ],
+    }
+    // Total km = 100: fuel liters = 8L at €1.8/L = €14.4 -> ~14
+    const budget = tripTotalBudget(trip, 100)
+    expect(budget.currency).toBe('EUR')
+    expect(budget.items).toBe(150)
+    expect(budget.fuel).toBeGreaterThan(0)
+    expect(budget.total).toBe(budget.items + budget.fuel)
   })
 
   it('dayDate calculates date with day offset', () => {
