@@ -2,19 +2,23 @@ services:
   tripplanner:
     build: .
     ports:
-      - "5200:5200" # web app + agent server
+      - "${PORT:-5200}:${PORT:-5200}" # web app + agent server
     environment:
+      - PORT=${PORT:-5200}
+      - NODE_ENV=production
       - ULISSE_DATA_DIR=/data/ulisse
+      - SESSION_SECRET=${SESSION_SECRET:?SESSION_SECRET environment variable is required}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:?ENCRYPTION_KEY environment variable is required}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@mytripplanner.local}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
     volumes:
       # the data folder is a bind mount so host and container share the SAME
       # human-readable files (trips/, images/, chats/, auth.json).
       # Windows: replace with  %USERPROFILE%/Documents/Ulisse:/data/ulisse
       - ~/Documents/Ulisse:/data/ulisse
       # keep the Claude CLI sign-in cache across rebuilds
-      - claude-data:/root/.claude
-      # ChatGPT/Codex engine: log in on the host once (`npx codex login`),
-      # then share the credentials with the container:
-      # - ~/.codex:/root/.codex
+      - claude-data:/home/node/.claude
 
 volumes:
   claude-data:

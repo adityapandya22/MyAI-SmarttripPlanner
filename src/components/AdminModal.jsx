@@ -15,11 +15,26 @@ export default function AdminModal({ open, onClose }) {
 }
 
 function AdminModalInner({ open, onClose }) {
-  const [isAdmin, setIsAdmin] = useState(() => localStorage.getItem('ulisse_admin_auth') === 'true')
-  const [username, setUsername] = useState('admin')
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loginError, setLoginError] = useState('')
   const [tab, setTab] = useState('keys') // 'keys' | 'trips' | 'system'
+
+  // Check server auth state on mount/open
+  useEffect(() => {
+    if (!open) return
+    fetch('/api/auth/me')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.authenticated && data.user?.role === 'admin') {
+          setIsAdmin(true)
+        } else {
+          setIsAdmin(false)
+        }
+      })
+      .catch(() => setIsAdmin(false))
+  }, [open])
 
   // Admin Config State
   const [geminiKey, setGeminiKey] = useState('')
@@ -63,20 +78,40 @@ function AdminModalInner({ open, onClose }) {
     }
   }, [open, isAdmin])
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault()
-    if (username.trim() === 'admin' && (password === 'admin123' || password === 'admin' || password === '')) {
-      localStorage.setItem('ulisse_admin_auth', 'true')
-      setIsAdmin(true)
-      setLoginError('')
-      toast('Welcome to Administrative Control Center')
-    } else {
-      setLoginError('Invalid credentials. Default password is: admin123')
+    setLoginError('')
+    try {
+      const res = await fetch('/api/auth/admin-login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'fetch',
+        },
+        body: JSON.stringify({ email: username.trim(), password }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setIsAdmin(true)
+        setLoginError('')
+        toast('Welcome to Administrative Control Center')
+      } else {
+        setLoginError(data.error || 'Invalid administrator credentials')
+      }
+    } catch {
+      setLoginError('Failed to communicate with authentication server')
     }
   }
 
-  const handleLogout = () => {
-    localStorage.removeItem('ulisse_admin_auth')
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'fetch' },
+      })
+    } catch {
+      // ignore
+    }
     setIsAdmin(false)
     setPassword('')
     toast('Logged out from Admin. Switched to Consumer Mode.')
@@ -123,13 +158,13 @@ function AdminModalInner({ open, onClose }) {
           <form onSubmit={handleLogin} className="mt-5 space-y-4">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-ink-500 mb-1">
-                Username
+                Admin Email / Username
               </label>
               <input
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="admin"
+                placeholder="admin@mytripplanner.local"
                 className="w-full rounded-xl border border-ink-200 bg-ink-50 px-3.5 py-2.5 text-sm font-medium text-ink-900 outline-none transition focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500"
               />
             </div>
@@ -142,12 +177,9 @@ function AdminModalInner({ open, onClose }) {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter admin password (default: admin123)"
+                placeholder="Enter administrator password"
                 className="w-full rounded-xl border border-ink-200 bg-ink-50 px-3.5 py-2.5 text-sm font-medium text-ink-900 outline-none transition focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500"
               />
-              <p className="mt-1.5 text-[11px] text-ink-400">
-                Default password: <code className="font-mono font-bold text-ink-700 bg-ink-100 px-1.5 py-0.5 rounded">admin123</code>
-              </p>
             </div>
 
             {loginError && (

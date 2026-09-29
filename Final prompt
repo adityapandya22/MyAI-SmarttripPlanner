@@ -1,0 +1,527 @@
+=====================================================================
+FINAL MASTER PROMPT - AI SMART TRIP PLANNER (MyAI-SmarttripPlanner)
+Paste this into your AI coding agent (Antigravity / Claude Code / Codex).
+If the agent hits a context limit, paste ONE "PART" at a time (PART 0 is
+always required first) and say "continue with the next PART" afterwards.
+=====================================================================
+
+ROLE
+You are a senior full-stack engineer and IT architect working inside THIS
+repository (React 19 + Vite + zustand + Leaflet frontend, plain Node HTTP +
+WebSocket server in /server, vitest tests). It is a fork of
+Prot10/MyTripPlanner (AGPL-3.0). Your job is to make it secure, correct,
+honest about its data, and presentation-ready as a college Software
+Engineering project.
+
+WORKING RULES (apply to every PART)
+1. Evidence first. Before changing anything, read the relevant files and run
+   the current tests. Baseline right now: `npm ci`, `npm run lint`,
+   `npm test` (12 files, 199 tests) and `npm run build` all PASS. Every PART
+   must end with lint + tests + build green. Never delete or weaken an
+   existing test to make it pass; extend tests instead.
+2. Do NOT break existing behaviour: India destination matching
+   (server/destination.mjs), Trie autocomplete (src/lib/trie.js), route
+   optimisation (optimizeDayRoute, clusterPOIs in server/worldPlaces.mjs).
+3. NEVER fabricate data. If a fact (price, rating, opening hours, review
+   count, fee) is not available from a real source, show it as "Not
+   available" or as a clearly-labelled ESTIMATE. Inventing plausible numbers
+   is the single worst failure for this project.
+4. Small, additive, reviewable changes. After each PART print a table:
+   DONE / PARTIAL / TODO with file names changed and test results.
+5. If any claim in this prompt is wrong about the code, tell me instead of
+   forcing a fix.
+6. Do not commit secrets. Do not print real keys in logs.
+
+---------------------------------------------------------------------
+KNOWN PROBLEMS FOUND IN THE AUDIT (all must be fixed)
+---------------------------------------------------------------------
+SECURITY
+ S1. server/bridge.mjs WebSocket (/agent) accepts ANY Origin (a cross-origin
+     upgrade returned HTTP 101). Any website open in the browser can drive
+     the local agent.
+ S2. "Admin login" is fake: src/components/AdminModal.jsx checks the
+     password in the browser, accepts 'admin123', 'admin' AND an empty
+     password, and stores localStorage 'ulisse_admin_auth'=true. The server
+     never checks it - admin_* WebSocket messages (admin_set_config = set API
+     keys) are accepted from anyone.
+ S3. There are no user accounts at all. All trips live in one shared data
+     folder (server/storage.mjs). No ownership, no isolation.
+ S4. POST /debug/tool in server/index.mjs is documented "localhost-only" but
+     is not enforced (Docker binds 0.0.0.0).
+ S5. `npm audit --omit=dev` shows 5 vulnerabilities (fast-uri, ip-address
+     = high; hono, @hono/node-server, qs = moderate), transitive via the
+     Claude Agent SDK.
+ S6. No security headers, no request body size limit, no rate limiting.
+HYGIENE
+ H1. Root files PRMP69, "TESTING PROMPT", final_finishing_prompt, prompt.txt
+     are AI working notes. Remove them from the repo.
+ H2. server ignores the PORT env var (always 5200) though .env.example
+     documents it. index.html has lang="it" for an English-default app.
+ H3. Bundle is 898 kB (single chunk). Needs code-splitting.
+DATA CORRECTNESS (the user's biggest complaint)
+ D1. server/providers/mockHotelProvider.mjs and mockRestaurantProvider.mjs
+     generate FAKE hotels/restaurants with invented scores, review counts and
+     INR base rates ("8500/night"). They are shown as if real.
+ D2. server/freeAgent.mjs and worldPlaces.mjs price stops with made-up
+     formulas: `price: item.estPrice ?? 200`, `price: 600`,
+     `Math.round(curInfo.dailyBudget * 0.18)`, `car_gas_price: 96`
+     (hardcoded), `car_gas_price: countryCode==='us' ? 3.5 : 1.8`, and
+     `car_gas_unit: 'inr_l'` for every trip.
+ D3. Currency is partly hardcoded to INR: freeAgent default currency 'INR',
+     the English reply prints "₹ ${cur}" even when cur is USD/EUR, and the
+     Italian reply hardcodes "₹ (Rupie)". Currency must follow the
+     DESTINATION country (and the user's home currency for conversion).
+ D4. Itinerary times are fixed slots (09:30/12:30/15:30/18:30) with no
+     check of opening hours, real travel time, weather or day feasibility.
+ D5. Live hotel/restaurant "providers" scrape Booking.com and Google Maps
+     with headless Chrome (server/booking.mjs, places.mjs). This is fragile
+     and against those sites' Terms of Service.
+
+=====================================================================
+PART 0 - SAFETY NET AND CLEANUP
+=====================================================================
+0.1 Create a git branch `release/final` (or note if no git repo exists) and
+    record the baseline test count.
+0.2 Delete PRMP69, "TESTING PROMPT", final_finishing_prompt, prompt.txt.
+    Keep LICENSE (AGPL-3.0) and keep attribution to Prot10/MyTripPlanner in
+    README ("Based on ..."). Add a NOTICE section listing what THIS project
+    added. Do not remove the original copyright line.
+0.3 Fix: server must honour process.env.PORT (default 5200) everywhere it
+    hard-codes 5200 (index.mjs, agent.mjs mcpPort, start scripts, Dockerfile
+    EXPOSE, docker-compose, README). Fix <html lang> to "en" and let the
+    i18n layer set document.documentElement.lang on language change.
+0.4 Run `npm audit fix` (no --force first). Re-test. If a remaining
+    advisory needs a breaking upgrade, use package.json "overrides" for the
+    transitive package; document anything left in SECURITY.md with reasoning.
+0.5 Add SECURITY.md (threat model in 15 lines: local-first app, who can
+    reach what, what is stored, how admin is protected).
+
+=====================================================================
+PART 1 - ARCHITECTURE (do this design first, write it to docs/ARCHITECTURE.md)
+=====================================================================
+Target architecture (keep the stack; do not rewrite in another framework):
+  Browser (React SPA + React Router)
+     |  HTTPS/HTTP + httpOnly cookie session      WebSocket /agent (same cookie)
+  Node server (server/)
+     modules:  http/router  |  auth (users, sessions, RBAC)  |  storage (SQLite)
+               places (Photon/Nominatim/Overpass/Wikipedia/Wikidata)
+               pricing (cost tables + FX)  |  weather (Open-Meteo)
+               routing (OSRM)  |  agent (free agent / LLM engines)
+               admin (config, users, audit)
+  SQLite database file in the data directory (use `better-sqlite3`; if native
+  build is a problem on the target OS, use Node's built-in `node:sqlite`).
+Tables (write migrations in server/db/migrations/*.sql, run at boot):
+  users(id, email UNIQUE, display_name, password_hash, role CHECK IN
+        ('user','admin'), home_currency, locale, is_active, must_change_pw,
+        failed_logins, locked_until, created_at)
+  sessions(id, user_id, token_hash, created_at, expires_at, ip, user_agent)
+  trips(id, user_id FK, title, data_json, created_at, updated_at)
+  audit_log(id, actor_user_id, action, target, meta_json, ip, created_at)
+  settings(key, value_encrypted, updated_by, updated_at)
+  places_cache(key, payload_json, source, fetched_at, ttl_seconds)
+  fx_rates(base, quote, rate, as_of, source)
+Migrate existing file-based trips: on first boot, if the old data folder has
+trips/*.json, import them into the DB under the first admin account (or a
+"local" user) and keep the original files as a backup. Keep a JSON export
+button so the user-visible, human-readable data feature is not lost.
+
+=====================================================================
+PART 2 - AUTHENTICATION: USER LOGIN vs ADMIN LOGIN (REAL, SERVER-SIDE)
+=====================================================================
+Requirements
+2.1 Passwords: hash with crypto.scrypt (N=2^15 or higher, random 16-byte salt,
+    stored as "scrypt$N$r$p$salt$hash"), constant-time compare with
+    timingSafeEqual. Min length 10, block the top common passwords list
+    (include a small bundled list). Never log passwords or tokens.
+2.2 Sessions: random 256-bit token -> cookie `sid` (httpOnly, SameSite=Lax,
+    Secure when HTTPS or NODE_ENV=production, Path=/, 7-day sliding expiry
+    for users, 60-minute idle expiry for admins). Store only SHA-256(token)
+    in the DB. Logout deletes the row. Rotate session id on login and on role
+    or password change.
+2.3 CSRF: for POST/PUT/PATCH/DELETE require a custom header
+    `X-Requested-With: fetch` AND verify the Origin/Host match the server's
+    allowed origins.
+2.4 Brute force: max 5 failed logins per email+IP per 15 minutes then
+    lock 15 minutes (increment failed_logins, set locked_until). Generic
+    error text ("Invalid email or password") - never reveal which one.
+2.5 Two DIFFERENT login surfaces:
+    - USER: routes /login, /register, /forgot (for a local app, implement
+      "reset by admin" instead of email: admin generates a one-time
+      temporary password with must_change_pw=true). Role 'user' only.
+    - ADMIN: separate route /admin/login with its own page and styling
+      ("Administrator sign-in"). It accepts ONLY role='admin'. A normal user
+      typing correct user credentials there must get the same generic
+      failure. Admin and user sessions are distinct (admin session has
+      shorter idle time and requires re-auth to change keys or delete users).
+2.6 First admin bootstrap: read ADMIN_EMAIL and ADMIN_PASSWORD from the
+    environment on first boot ONLY when no admin exists. If they are missing,
+    generate a random 20-char password, print it ONCE to the server console
+    with a warning, and set must_change_pw=true. There must be NO hardcoded
+    default credential anywhere (remove 'admin123' from AdminModal.jsx, the
+    README and every test).
+2.7 RBAC middleware: requireAuth, requireRole('admin'). Every route and every
+    WebSocket message type gets an explicit access rule in one table
+    (server/auth/policy.mjs). Default = deny. User endpoints always filter by
+    session.user_id (row-level ownership): a user can never read, edit or
+    delete another user's trip (return 404, not 403, to avoid enumeration).
+2.8 WebSocket: on upgrade verify (a) cookie session valid, (b) Origin is in
+    the allowlist (localhost:PORT, 127.0.0.1:PORT, Vite dev port, and any
+    origins in ALLOWED_ORIGINS env). Reject with 401/403 otherwise. Attach
+    user {id, role} to the socket. Messages starting with `admin_` require
+    role==='admin' re-checked per message. `chat`/`stop`/`reset` require any
+    authenticated user and operate only on that user's trip. Cap message size
+    (e.g. 256 KB) and rate-limit per socket.
+2.9 Remove the /debug/tool route in production. In dev only, require admin
+    session AND NODE_ENV!=='production'.
+2.10 Remove `localStorage 'ulisse_admin_auth'` entirely. The frontend learns
+    the role from GET /api/me only.
+
+Admin capabilities (admin dashboard, route /admin, role-guarded)
+  - Overview: user count, trips count, active sessions, server health, data
+    source status (Nominatim/Overpass/Wikipedia/OSRM/Open-Meteo reachable?
+    last success time), cache hit rate.
+  - Users: list, search, disable/enable, force password reset, change role,
+    delete (with confirm + re-auth). An admin cannot demote/delete the last
+    remaining admin or themselves.
+  - Trips (privacy-safe): metadata only (owner, destination, dates,
+    created_at, size). Admin does NOT read the contents of a user's trip
+    unless an explicit "support access" toggle is enabled in settings; when
+    used it is written to the audit log.
+  - API keys / engine config (Gemini, Groq, OpenAI-compatible, optional
+    places/pricing keys): stored ENCRYPTED at rest (AES-256-GCM, key from
+    ENCRYPTION_KEY env; refuse to start in production if missing). The API
+    only ever returns a masked preview (last 4 chars). Never send full keys
+    to the browser.
+  - Audit log viewer (filter by actor/action/date) and CSV export.
+  - Maintenance: clear places cache, refresh FX rates now, run data-source
+    health check.
+Normal user features: register/login/logout, edit profile (display name, home
+currency, language), change password, own trips CRUD, export/import own trips
+as JSON, delete own account (with password confirmation).
+
+Auth tests (vitest + a test HTTP client; must be in CI)
+  - scrypt hash/verify round trip; wrong password fails; timing-safe path
+  - lockout after 5 failures; generic error message
+  - session expiry, logout invalidation, session rotation
+  - user cannot open /admin/* or call admin_* WS messages (403)
+  - user A cannot GET/PUT/DELETE user B's trip (404)
+  - WS upgrade with Origin https://evil.example is rejected
+  - WS upgrade without cookie is rejected
+  - last-admin protection; no default credentials present in the repo
+    (a test that greps src/ and server/ for 'admin123')
+
+=====================================================================
+PART 3 - SERVER HARDENING
+=====================================================================
+3.1 Security headers on every response: Content-Security-Policy (default-src
+    'self'; img-src 'self' data: https://*.tile.openstreetmap.org and any
+    provider image hosts actually used; connect-src 'self' ws: wss: plus the
+    public APIs the BROWSER calls directly, if any), X-Content-Type-Options:
+    nosniff, Referrer-Policy: strict-origin-when-cross-origin,
+    X-Frame-Options: DENY (the promo-site demo iframe lives on another
+    build and is unaffected), Permissions-Policy minimal.
+3.2 Static file server: resolve with path.resolve and verify the result
+    startsWith(DIST) before reading; unknown paths -> SPA fallback only for
+    GET requests that accept text/html, otherwise 404 JSON.
+3.3 JSON body limit (1 MB, 413 on excess), content-type check, Zod schema
+    validation for EVERY API input (extend the existing zod usage). Validate
+    trip data on load and import (TripSchema mirroring normalizeTrip in
+    src/lib/utils.js); return a clear 422 with field errors - never crash or
+    silently repair.
+3.4 Rate limiting: per IP for /api/auth/* (strict), /api/places/* (respect
+    upstream limits), and chat messages per user per minute.
+3.5 Central error handler: log detail server-side with a request id, return
+    a generic message + request id to the client.
+3.6 Docker: run as non-root user, add HEALTHCHECK on /health, keep
+    AGENT_HOST=0.0.0.0 only in Docker, and make docker-compose require
+    SESSION_SECRET, ENCRYPTION_KEY, ADMIN_EMAIL, ADMIN_PASSWORD (fail fast
+    with a clear message if unset). Update .env.example with every variable.
+3.7 Remove the Booking.com / Google Maps headless-Chrome scraping from the
+    default path (see PART 4). If you keep the code, gate it behind
+    ULISSE_ENABLE_SCRAPERS=1, default OFF, with a comment that it may
+    violate the sites' Terms of Service and is unsupported.
+
+=====================================================================
+PART 4 - REAL AND HONEST DATA (places, days, prices)
+=====================================================================
+Goal: whatever is shown in the frontend is either REAL (fetched from a named
+source, with timestamp) or clearly labelled ESTIMATE/SAMPLE. Nothing else.
+
+4.1 DATA PROVENANCE MODEL. Every place, hotel, restaurant, price, weather
+    and route object carries:
+      { source: 'osm'|'wikipedia'|'wikidata'|'nominatim'|'photon'|'osrm'|
+                'open-meteo'|'cost-table'|'user'|'bundled',
+        fetchedAt: ISO time, confidence: 'verified'|'estimate'|'sample',
+        sourceUrl?: string }
+    The UI shows a small badge/tooltip on cards: "Live - OpenStreetMap,
+    fetched 2 min ago", "Estimate - regional cost table 2025", "Sample data".
+    Add attribution required by the licences (OpenStreetMap contributors
+    (ODbL), Wikipedia text (CC BY-SA), Open-Meteo (CC BY 4.0)) in the footer
+    and in an "About data" dialog.
+
+4.2 PLACE SEARCH (what the user types)
+    - Typeahead: use Photon (photon.komoot.io) or the existing Trie for
+      known cities. Do NOT call public Nominatim on every keystroke (its
+      usage policy forbids autocomplete). Debounce 300 ms, cancel stale
+      requests, cache results.
+    - On submit: geocode with Nominatim (1 req/s limiter already exists, keep
+      it; send a real User-Agent + NOMINATIM_EMAIL) and show a
+      DISAMBIGUATION step whenever there is more than one plausible match
+      ("Paris, France" vs "Paris, Texas, USA"; "Georgia" country vs state;
+      "Hyderabad" India vs Pakistan). The user must pick one. The chosen
+      place stores: display name, country code, admin area, lat/lng, bbox,
+      timezone (from lat/lng using a small offline tz lookup or Open-Meteo's
+      returned timezone), local currency, driving side, language(s).
+    - Country or region input ("Japan", "Himachal") must ask for a city/area
+      (existing behaviour, keep) and propose real candidate cities with a
+      one-line reason each, sourced from Wikipedia/Wikidata popularity, not
+      from a hardcoded guess.
+    - Typos and non-Latin input (e.g. 東京) resolve correctly via geocoder
+      language parameters; cover with tests.
+
+4.3 ATTRACTIONS
+    - Sources in order: Wikipedia GeoSearch + Wikidata (name, description,
+      image, official website), Overpass (tourism=attraction|museum|viewpoint|
+      artwork, historic=*, leisure=park, natural=*), bundled offline list only
+      as the last fallback and labelled 'bundled'.
+    - For each stop store: name (local + English), coordinates, category,
+      opening_hours (OSM tag, parsed with the `opening_hours` npm package),
+      fee info ONLY from OSM `fee`/`charge` tags or Wikidata; otherwise
+      entryFee = null and the UI shows "Entry fee: not listed" (never 0 and
+      never a default 200).
+    - De-duplicate by name + 150 m radius; drop stops with no name; cap
+      results and rank by Wikipedia sitelinks/pageviews or OSM importance.
+
+4.4 HOTELS AND RESTAURANTS (no fake data)
+    - Delete the mock providers from the production path (keep them only for
+      unit tests and the offline DEMO build, and in that case show a visible
+      "DEMO DATA" ribbon on every card).
+    - Real names/locations from Overpass (tourism=hotel|guest_house|hostel|
+      apartment, amenity=restaurant|cafe|fast_food with cuisine, diet:*,
+      opening_hours, phone, website tags).
+    - Ratings/review counts: show ONLY if returned by a configured real
+      provider. Define a provider interface (server/providers/types.mjs
+      already exists) and implement optional adapters that need an API key
+      entered in the Admin panel: Geoapify Places, Foursquare Places or
+      OpenTripMap (pick at most two; free tiers). No key = no rating shown
+      and no invented rating.
+    - Prices: hotels/restaurants get a price BAND from the cost table
+      (see 4.6), shown as "Estimated ₹X-Y per night" with the estimate
+      badge. Never show a single fake exact rate. Provide a "Check live
+      prices" deep link to the booking site for the dates instead of
+      pretending to know the price.
+
+4.5 DAY-BY-DAY ITINERARY (proper days, proper things per date)
+    - Inputs: start date, number of days (or end date), travellers count,
+      travel style (budget/mid/luxury), interests, pace (relaxed/normal/
+      packed), arrival/departure times, hotel location.
+    - Each day gets: real calendar date + weekday, theme (existing
+      deriveDayTheme), an ordered list of stops with start-end times, a
+      lunch and dinner slot (a real restaurant near the route), and travel
+      legs between stops with REAL distance and duration from OSRM
+      (router.project-osrm.org; fall back to haversine x 1.3 and mark it
+      'estimate').
+    - Feasibility rules (unit-test them): active time per day <= 9 h for
+      'normal' pace; no stop scheduled when its opening_hours say closed on
+      that weekday/time (move it or flag "Closed on Mondays"); at most one
+      long transfer (>2 h) per day; group stops geographically with the
+      existing clusterPOIs + optimizeDayRoute; account for the destination
+      time zone.
+    - Weather per date from Open-Meteo (free, no key): forecast if within
+      16 days, otherwise show climate normals; add a "rain plan" swap for
+      outdoor stops on wet days. Show sunrise/sunset for viewpoints.
+    - Replace the hard-coded 09:30/12:30/15:30/18:30 slots with computed
+      times.
+    - Multi-city trips: split days across cities in proportion to
+      attraction density; add an explicit transfer day/leg with mode and
+      REAL distance; do not print flight/train prices unless a provider
+      supplies them.
+
+4.6 BUDGET AND CURRENCY (rupees vs dollars vs euros - by location and need)
+    - New module server/pricing/ with data/costTable.json: for each country
+      (start with the ~40 most-visited countries + all Indian states/major
+      cities) give per-person-per-day cost bands in USD for three tiers
+      (budget/mid/luxury) and per category: accommodation, food, local
+      transport, activities, plus fuel price per litre and typical taxi
+      base fare. Every row must include `source` (e.g. "Numbeo 2025",
+      "World Bank ICP", "Government tourism board"), `year` and
+      `retrievedAt`. If you cannot cite a source for a country, do NOT
+      invent numbers: mark the country "no cost data" and the UI must say
+      "Budget estimate unavailable for this country" and let the user type
+      their own numbers.
+    - Currency rules:
+        * tripCurrency = currency of the DESTINATION country (from the
+          existing COUNTRY_CURRENCY_MAP, verified with a test for every
+          entry) - e.g. INR for Goa, JPY for Tokyo, EUR for Paris, USD for
+          Texas.
+        * homeCurrency = the user's profile setting (default INR for users
+          whose locale is en-IN). Show BOTH: primary amount in trip
+          currency, secondary "≈ ₹X" in home currency, with a toggle.
+        * Never hardcode ₹, "INR", "inr_l", "Rupie" or a fixed fuel price.
+          Format money ONLY with Intl.NumberFormat(locale, {style:
+          'currency', currency}) so INR shows lakh/crore grouping
+          (en-IN), USD shows $1,234.50, JPY has no decimals, etc.
+        * FX: frankfurter.dev (ECB) primary; fallback open.er-api.com for
+          currencies ECB does not publish (e.g. AED). Cache 24 h in the DB
+          (fx_rates) and show "Rates as of <date>". If no rate is available
+          show only the trip currency and say so - never fall back to a
+          silent constant like 83.5.
+    - Budget engine (pure functions, heavily unit-tested):
+        total = sum over days of ( stay(nights, tier, travellers/rooms) +
+          food(tier) + localTransport(km or tier) + activities(known fees;
+          unknown fees use the tier's activity band) ) + intercity
+          transport (fuel = distance/efficiency*fuelPrice for self-drive) +
+          contingency 10 %.
+      Output a RANGE (low-high) plus a "most likely" value, per day and per
+      category, per person and per group. Recompute live when the user edits
+      days, tier, travellers or currency.
+    - UI: budget page with stacked bar per day, donut by category, table
+      with editable overrides (user-entered values are marked 'user' and win
+      over estimates), and a warning if the itinerary exceeds the user's
+      stated budget with 2-3 concrete ways to reduce it.
+
+4.7 FRESHNESS AND FAILURE HANDLING
+    - Cache (places_cache) with sensible TTLs (geocode 30 d, POI 7 d, FX
+      24 h, weather 3 h). Show "Live / Cached / Offline" chip.
+    - If an upstream fails, degrade gracefully with an inline message
+      ("Live attractions unavailable - showing offline list for Goa") - not
+      an empty screen and not fake data.
+    - Golden-test destinations (network mocked with recorded fixtures):
+      Mumbai, Goa, Old Manali, Himachal (asks for city), Paris FR vs Paris TX
+      (asks to disambiguate), Tokyo, Dubai, Bali, New York, Reykjavik, Sydney.
+      Assert currency, country, distinct coordinates per stop, >= 3 stops
+      per day, opening-hour conflicts flagged, no stop with price 200 default,
+      budget total equals the sum of its rows, and every displayed value has
+      a provenance object.
+    - The free agent's chat text must be generated from the SAME numbers the
+      widgets show (single source of truth: the trip object) - the existing
+      test "agent final message and budget widget agree" must be extended to
+      three currencies.
+
+=====================================================================
+PART 5 - FRONTEND: PROFESSIONAL, ACCESSIBLE, CLEAR
+=====================================================================
+5.1 Routing (react-router): /, /login, /register, /trips, /trips/:id
+    (tabs: Overview, Itinerary, Map, Budget, Stays & Food, Checklist),
+    /profile, /admin/login, /admin (Overview, Users, Trips, Engine & Keys,
+    Audit, Maintenance). Guard routes by role; unauthorised -> redirect to
+    the right login. Lazy-load each route (React.lazy + Suspense) to remove
+    the 898 kB single-chunk warning; target < 300 kB gzip initial JS.
+5.2 Design system: define tokens (colour, spacing, radius, type scale) in
+    src/index.css using Tailwind v4 @theme; build reusable Button, Input,
+    Select, Card, Badge, Tabs, Modal, Toast, Skeleton, EmptyState,
+    ErrorState components. Light + dark theme (prefers-color-scheme + toggle).
+    Consistent icon set (lucide). One clean font stack.
+5.3 Onboarding wizard (replaces the free-text-only start): Step 1 Where
+    (search with disambiguation), Step 2 When & how long (date range picker
+    with real calendar, shows weekdays), Step 3 Who & style (travellers,
+    tier, pace, interests chips), Step 4 Budget & currency (auto trip
+    currency, home currency, optional max budget), Step 5 Review and
+    generate. Progress stepper, back/next, validation messages.
+5.4 Itinerary view: day tabs or vertical timeline; each day header shows
+    date, weekday, weather icon + temperature, theme, total walking/driving
+    time and day cost; each stop shows time window, category icon, photo
+    (Wikimedia Commons, with attribution) or a neutral placeholder, opening
+    hours status chip (Open/Closed/Unknown), fee (or "not listed"),
+    provenance badge, and a "Why this stop" one-liner. Drag-and-drop
+    reordering (dnd-kit already present) recomputes times, legs and budget
+    instantly. Undo/redo.
+5.5 Map: numbered pins per day with day colours, route lines with real
+    distance/time chips, cluster markers, "fit to day" button, offline tile
+    notice, attribution.
+5.6 Budget view as specified in 4.6, with currency toggle and export.
+5.7 Trust and clarity: a persistent "Data status" pill (Live / Cached /
+    Partly estimated / Demo), an "About this data" dialog listing sources
+    and dates, and estimate tooltips explaining how each number was made.
+5.8 States and feedback: skeleton loaders for every fetch, empty states
+    with a clear next action, inline error states with Retry, optimistic UI
+    with rollback, toasts for save/undo.
+5.9 Responsive and mobile: usable at 360 px width; bottom-sheet navigation
+    on mobile (a BottomSheet already exists); touch targets >= 44 px.
+5.10 Accessibility (WCAG 2.2 AA): semantic landmarks, labels on every
+    input, visible focus, keyboard-operable drag-and-drop alternatives
+    (move up/down buttons), colour contrast >= 4.5:1, aria-live for toasts
+    and loading, prefers-reduced-motion respected, screen-reader text for
+    icons. Run axe (vitest-axe or @axe-core/playwright) on the main screens.
+5.11 i18n: keep en + it; add hi (Hindi). All user-visible strings, dates
+    and numbers go through i18n/Intl. No hardcoded English in components
+    (write a lint test that scans for common offenders).
+5.12 Export/share: print-friendly itinerary (CSS @media print), "Download
+    PDF" (browser print), .ics calendar export (one event per stop with
+    correct time zone), and a shareable read-only JSON/link that contains no
+    personal data.
+5.13 Performance: memoise heavy lists, virtualise long lists, debounce map
+    updates, images loading="lazy" with width/height, Lighthouse
+    Performance and Accessibility >= 90 on the built app.
+
+=====================================================================
+PART 6 - TESTING, CI AND QUALITY GATES
+=====================================================================
+6.1 Keep all 199 existing tests green; add tests for PART 2-5 (auth, RBAC,
+    WS origin, budget maths, currency formatting for INR/USD/EUR/JPY/AED,
+    opening-hours conflicts, disambiguation, provenance presence).
+6.2 Add integration tests that boot the server on a random port with a temp
+    data dir and exercise register -> login -> create trip -> logout ->
+    admin login -> forbidden trip contents.
+6.3 Add 3-5 Playwright end-to-end tests: user journey (register, plan Goa 3
+    days in INR, see budget), admin journey (login, disable user), and
+    "user cannot open /admin".
+6.4 Update .github/workflows/ci.yml: npm ci, lint, test, build, `npm audit
+    --omit=dev --audit-level=high` (fail on high), and e2e on a headless
+    browser. Add coverage reporting (vitest --coverage) with a floor of
+    70 % for server/auth, server/pricing and src/lib.
+6.5 Add `npm run verify` = lint + test + build + audit, and make sure it
+    passes from a clean clone.
+
+=====================================================================
+PART 7 - DOCUMENTATION FOR SUBMISSION (SOFTWARE ENGINEERING PROJECT)
+=====================================================================
+Create or update:
+  - README.md: what it does, screenshots (regenerate docs/*.png), setup in
+    5 commands, all environment variables, default first-admin procedure
+    (no default password), data sources and licences table, limitations.
+  - docs/ARCHITECTURE.md: component diagram (Mermaid), data flow for "user
+    types a place -> itinerary", ER diagram for the DB, sequence diagram for
+    login and for WebSocket auth.
+  - docs/SRS.md: functional requirements (FR-1...), non-functional
+    requirements (security, performance, accessibility), use cases for User
+    and Admin, and a requirements-to-test traceability table.
+  - docs/VIVA.md: extend the existing DSA guide with: scrypt + sessions,
+    RBAC, haversine/clustering/route optimisation, LRU cache + rate limiter,
+    Trie, budget algorithm, and "how we guarantee data is not fake".
+  - docs/DATA_SOURCES.md: each external API, its licence, rate limit, what
+    we store, and how failures are handled.
+  - docs/TEST_REPORT.md: generated summary of test counts and coverage.
+
+=====================================================================
+DEFINITION OF DONE (verify each line and report it in the final message)
+=====================================================================
+[ ] npm ci, lint, test, build, audit(high) all pass from a clean clone
+[ ] Cross-origin WebSocket upgrade is rejected; unauthenticated WS rejected
+[ ] No hardcoded credential exists (grep for admin123 returns nothing)
+[ ] User login and Admin login are separate pages, roles enforced on the
+    SERVER for every route and every WS message; user cannot reach admin
+[ ] Users only ever see their own trips; API keys encrypted and masked
+[ ] Typing "Paris" asks France vs Texas; "Goa" -> INR; "Tokyo" -> JPY;
+    "Dubai" -> AED; "New York" -> USD; each with correct country and a
+    real map location
+[ ] Every itinerary day shows real date, weekday, weather, stops with
+    computed times, real drive/walk legs, opening-hour warnings
+[ ] Budget is a range with per-day and per-category breakdown, trip currency
+    + home currency, correct formatting, "rates as of" date, no silent
+    constants, no default 200/600 prices anywhere (grep proves it)
+[ ] No mock/fake hotel or restaurant appears outside DEMO mode; ratings
+    appear only when a real provider returned them
+[ ] Every price/place/weather value in the UI has a provenance badge or
+    tooltip; data-source attribution is visible
+[ ] Initial JS < 300 kB gzip; Lighthouse Perf and A11y >= 90; axe clean
+[ ] Prompt/notes files removed; LICENSE + upstream attribution preserved
+[ ] Docs in PART 7 exist and match the code
+
+FINAL REPORT FORMAT
+Print: (1) a table of PART -> DONE/PARTIAL/TODO, (2) list of files
+added/changed/deleted, (3) the exact test/lint/build/audit output summary,
+(4) anything you could NOT verify (for example live APIs unreachable from
+your sandbox) and why, (5) a short list of known limitations that should be
+told honestly to the examiner. Do not claim anything is verified unless you
+ran it.

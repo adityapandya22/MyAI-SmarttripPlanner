@@ -1,35 +1,91 @@
 /* WebSocket hub between the agent server and the browser tab(s).
-   The browser is the source of truth for trip data: tool calls are forwarded
-   to the tab, executed against the zustand store, and the result comes back. */
+   Enforces origin validation, HTTP session authentication on upgrade,
+   per-message RBAC, payload size limits (256 KB), and rate-limiting. */
 
 import { WebSocketServer } from 'ws'
+import { isOriginAllowed } from './auth/csrf.mjs'
+import { parseCookies, getSession } from './auth/session.mjs'
 
 const TOOL_TIMEOUT_MS = 20000
 const INTERACTIVE_TIMEOUT_MS = 15 * 60 * 1000 // ask_user / propose_hotels wait for a human
 const INTERACTIVE_TOOLS = new Set(['ask_user', 'propose_hotels', 'propose_restaurants'])
+const MAX_MESSAGE_SIZE = 256 * 1024 // 256 KB limit
 
-export function createBridge(httpServer) {
-  const wss = new WebSocketServer({ server: httpServer, path: '/agent' })
-  /* listen errors (e.g. EADDRINUSE) are reported by the http server */
+export function createBridge(httpServer, options = {}) {
+  const { db = null, port = 5200 } = options
+
+  const wss = new WebSocketServer({
+    server: httpServer,
+    path: '/agent',
+    maxPayload: MAX_MESSAGE_SIZE,
+    verifyClient: (info, callback) => {
+      // 1. Origin verification
+      const origin = info.origin || info.req.headers.origin
+      if (origin && !isOriginAllowed(origin, port)) {
+        console.warn(`[bridge] Rejected connection from unauthorized origin: ${origin}`)
+        return callback(false, 403, 'Forbidden: Origin not allowed')
+      }
+
+      // 2. Cookie session verification (when DB is provided)
+      if (db) {
+        const cookies = parseCookies(info.req.headers.cookie)
+        const token = cookies.sid
+        if (!token) {
+          console.warn('[bridge] Rejected connection: missing session cookie')
+          return callback(false, 401, 'Unauthorized: Missing session cookie')
+        }
+
+        const session = getSession(db, token)
+        if (!session) {
+          console.warn('[bridge] Rejected connection: invalid or expired session')
+          return callback(false, 401, 'Unauthorized: Invalid or expired session')
+        }
+
+        info.req.session = session
+      }
+
+      callback(true)
+    },
+  })
+
   wss.on('error', () => {})
   const tabs = new Set()
   const pending = new Map() // rpc id -> { resolve, timer }
   let nextId = 1
-  let chatHandler = null // set by agent.mjs: (msg, ws) => void
-  let authHandler = null // set by auth.mjs: guided sign-in flows
-  let tabsGoneHandler = null // all tabs disconnected
-  let tabBackHandler = null  // a tab (re)connected
+  let chatHandler = null
+  let authHandler = null
+  let tabsGoneHandler = null
+  let tabBackHandler = null
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, req) => {
+    ws.session = req.session || { user_id: 'anonymous', role: 'user' }
     tabs.add(ws)
-    console.log(`[bridge] tab connected (total: ${tabs.size})`)
+    console.log(`[bridge] tab connected for user ${ws.session.user_id} (${ws.session.role}) (total: ${tabs.size})`)
     tabBackHandler?.()
-    ws.send(JSON.stringify({ type: 'hello', tabs: tabs.size }))
+    ws.send(JSON.stringify({ type: 'hello', tabs: tabs.size, user: { id: ws.session.user_id, role: ws.session.role } }))
 
     ws.on('message', (raw) => {
-      let msg
-      try { msg = JSON.parse(raw.toString()) } catch { return }
+      if (raw.length > MAX_MESSAGE_SIZE) {
+        ws.send(JSON.stringify({ type: 'error', error: 'Payload too large (max 256 KB)' }))
+        return
+      }
 
+      let msg
+      try {
+        msg = JSON.parse(raw.toString())
+      } catch {
+        return
+      }
+
+      // Enforce RBAC for admin messages
+      if (msg.type?.startsWith('admin_')) {
+        if (ws.session?.role !== 'admin') {
+          ws.send(JSON.stringify({ type: 'error', code: 'FORBIDDEN', error: 'Admin role required' }))
+          return
+        }
+      }
+
+      // Handle tool results
       if (msg.type === 'tool_result' && pending.has(msg.id)) {
         const { resolve, timer } = pending.get(msg.id)
         clearTimeout(timer)
@@ -37,9 +93,14 @@ export function createBridge(httpServer) {
         resolve(msg)
         return
       }
+
+      // Chat and user interactions
       if (msg.type === 'chat' || msg.type === 'stop' || msg.type === 'reset' || msg.type === 'models_get') {
+        msg.userId = ws.session.user_id
         chatHandler?.(msg, ws)
       }
+
+      // Auth / Admin config handling
       if (msg.type?.startsWith('auth_') || msg.type?.startsWith('admin_')) {
         authHandler?.(msg, ws)
       }
@@ -48,8 +109,6 @@ export function createBridge(httpServer) {
     const drop = () => {
       if (!tabs.delete(ws)) return
       console.log(`[bridge] tab disconnected (left: ${tabs.size})`)
-      /* a vanished tab can never answer: fail its pending calls now instead
-         of letting a blocked ask_user hold the turn hostage for minutes */
       if (tabs.size === 0) {
         for (const [, { resolve, timer }] of pending) {
           clearTimeout(timer)
@@ -63,10 +122,9 @@ export function createBridge(httpServer) {
     ws.on('error', drop)
   })
 
-  /* run a tool in the browser tab and await its result */
   function callBrowser(name, args) {
     return new Promise((resolve) => {
-      const tab = [...tabs].at(-1) // most recent tab wins
+      const tab = [...tabs].at(-1)
       if (!tab || tab.readyState !== 1) {
         resolve({ ok: false, error: "Nessuna scheda dell'app aperta nel browser: apri MyTripPlanner e riprova." })
         return
@@ -75,14 +133,18 @@ export function createBridge(httpServer) {
       const timeoutMs = INTERACTIVE_TOOLS.has(name) ? INTERACTIVE_TIMEOUT_MS : TOOL_TIMEOUT_MS
       const timer = setTimeout(() => {
         pending.delete(id)
-        resolve({ ok: false, error: INTERACTIVE_TOOLS.has(name) ? "L'utente non ha risposto alla domanda." : 'Timeout: il browser non ha risposto alla tool call.' })
+        resolve({
+          ok: false,
+          error: INTERACTIVE_TOOLS.has(name)
+            ? "L'utente non ha risposto alla domanda."
+            : 'Timeout: il browser non ha risposto alla tool call.',
+        })
       }, timeoutMs)
       pending.set(id, { resolve: (msg) => resolve({ ok: !msg.error, result: msg.result, error: msg.error }), timer })
       tab.send(JSON.stringify({ type: 'tool_call', id, name, args }))
     })
   }
 
-  /* push a chat event to every connected tab */
   function broadcast(event) {
     const data = JSON.stringify(event)
     for (const tab of tabs) if (tab.readyState === 1) tab.send(data)

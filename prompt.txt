@@ -1,7 +1,0 @@
-part 6Add two small robustness improvements to this repo (MyTripPlanner):
-
-1. Add a React error boundary component (src/components/ErrorBoundary.jsx) using a class component (required for componentDidCatch) that renders a friendly fallback UI ("Something went wrong" with a reload button) and logs the error to the console with context. Wrap the main app sections in src/App.jsx with it — at minimum, wrap the map panel and the chat panel separately so a crash in one doesn't take down the whole app, plus one top-level boundary around the whole app as a last resort.
-
-2. In server/storage.mjs, the app currently reads/writes trip JSON files with no schema validation. Using zod (already a dependency — see server/tools.mjs for the existing pattern), define a TripSchema that mirrors what src/lib/utils.js's normalizeTrip expects, and validate trip data server-side when it's loaded from disk and when a trip is imported, returning a clear error (not a silent crash or corrupted state) if validation fails. Look at normalizeTrip first so the schema matches the real shape rather than guessing.
-
-Keep both changes additive and defensive — don't change the happy-path behavior for valid data.

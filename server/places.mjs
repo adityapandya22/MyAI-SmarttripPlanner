@@ -111,6 +111,16 @@ export async function searchRestaurants(args) {
     + '?hl=en'
   const base = { location, query: searchQuery, search_url: searchUrl }
 
+  // Gate behind ULISSE_ENABLE_SCRAPERS=1
+  // Scraping Google Maps without an API may violate its Terms of Service and is unsupported.
+  if (process.env.ULISSE_ENABLE_SCRAPERS !== '1') {
+    return {
+      ...base,
+      restaurants: [],
+      hint: 'Scraping is disabled by default (set ULISSE_ENABLE_SCRAPERS=1 to enable). Note: automated web scraping may violate provider Terms of Service.',
+    }
+  }
+
   let page = null
   let page2 = null
   try {

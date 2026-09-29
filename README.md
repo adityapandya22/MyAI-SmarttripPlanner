@@ -301,6 +301,18 @@ If this project is useful to you, consider supporting its development:
 
 This repository is built upon the open-source project **[Prot10/MyTripPlanner](https://github.com/Prot10/MyTripPlanner)** created by Andrea Protani, licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. The original LICENSE file is preserved in this repository.
 
+### NOTICE — What This Fork (MyAI-SmarttripPlanner) Adds
+
+This fork is a **Software Engineering college project** that extends the upstream with:
+
+- **Security hardening**: server-side authentication (scrypt password hashing, session tokens, RBAC), WebSocket origin validation, CSRF protection, rate limiting, security headers, encrypted API key storage.
+- **Honest data**: removal of fabricated hotel/restaurant data; all prices, ratings, and places are either sourced from real APIs (with provenance badges) or clearly labelled as estimates.
+- **Multi-currency budget engine**: destination-aware currency (INR for India, JPY for Japan, etc.) with live FX rates and per-day/per-category cost breakdowns.
+- **Improved itinerary**: computed travel times (OSRM), opening-hours awareness, weather integration (Open-Meteo), feasibility checks.
+- **User accounts & trip isolation**: SQLite-backed multi-user system with admin dashboard.
+- **Accessibility & i18n**: WCAG 2.2 AA compliance, Hindi language support, responsive design.
+- **Documentation**: SRS, architecture diagrams, test reports, viva preparation guide.
+
 - **Worldwide Keyless Destination Planning (`server/worldPlaces.mjs`)**: Plan multi-day road trips to any city or region across the globe using 100% free, keyless services. Features intelligent resolution order (India first, then global Nominatim geocoding), disambiguation for ambiguous locations (e.g. Paris, France vs Paris, Texas), country-vs-city detection with recommended cities, and multi-city route planning (e.g. "Kyoto and Osaka").
 - **DSA Route & Itinerary Optimization**:
   - **Haversine Distance Matrix**: Pure mathematical spherical geometry distance calculations between coordinates without external API calls.
@@ -330,7 +342,7 @@ This repository is built upon the open-source project **[Prot10/MyTripPlanner](h
 |---|---|---|
 | `WORLD_PLACES_ENABLED` | `1` | Set to `0` to disable worldwide resolution and restrict queries strictly to India datasets. |
 | `NOMINATIM_EMAIL` | *(optional)* | Contact email sent in the `User-Agent` header for Nominatim requests per OSM Foundation guidelines. |
-| `PORT` | `3001` | Server HTTP and WebSocket listener port. |
+| `PORT` | `5200` | Server HTTP and WebSocket listener port. |
 
 ## License
 

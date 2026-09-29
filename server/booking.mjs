@@ -81,6 +81,16 @@ export async function searchHotels(args) {
   const url = searchUrl({ location, checkin, checkout, adults, rooms, currency, dest })
   const base = { location, resolved_as: dest?.label ?? location, checkin, checkout, nights, adults, rooms, search_url: url }
 
+  // Gate behind ULISSE_ENABLE_SCRAPERS=1
+  // Scraping Booking.com without an API may violate its Terms of Service and is unsupported.
+  if (process.env.ULISSE_ENABLE_SCRAPERS !== '1') {
+    return {
+      ...base,
+      properties: [],
+      hint: 'Scraping is disabled by default (set ULISSE_ENABLE_SCRAPERS=1 to enable). Note: automated web scraping may violate provider Terms of Service.',
+    }
+  }
+
   let page = null
   try {
     const browser = await getBrowser()

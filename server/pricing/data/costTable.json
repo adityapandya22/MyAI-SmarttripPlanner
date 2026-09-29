@@ -1,0 +1,206 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "meta": {
+    "version": "2025.1",
+    "updatedAt": "2025-01-15T00:00:00Z",
+    "defaultSource": "Numbeo Cost of Living Index 2025 & World Bank ICP"
+  },
+  "countries": {
+    "in": {
+      "name": "India",
+      "currency": "INR",
+      "source": "Government of India Tourism Board & Numbeo 2025",
+      "year": 2025,
+      "retrievedAt": "2025-01-15T00:00:00Z",
+      "fuelPricePerLiterUsd": 1.15,
+      "taxiBaseFareUsd": 0.60,
+      "tiers": {
+        "budget": { "accommodation": 15, "food": 8, "localTransport": 3, "activities": 4 },
+        "mid": { "accommodation": 45, "food": 20, "localTransport": 8, "activities": 12 },
+        "luxury": { "accommodation": 140, "food": 55, "localTransport": 25, "activities": 40 }
+      }
+    },
+    "fr": {
+      "name": "France",
+      "currency": "EUR",
+      "source": "Insee & Numbeo 2025",
+      "year": 2025,
+      "retrievedAt": "2025-01-15T00:00:00Z",
+      "fuelPricePerLiterUsd": 1.95,
+      "taxiBaseFareUsd": 8.00,
+      "tiers": {
+        "budget": { "accommodation": 55, "food": 30, "localTransport": 10, "activities": 15 },
+        "mid": { "accommodation": 130, "food": 65, "localTransport": 20, "activities": 35 },
+        "luxury": { "accommodation": 320, "food": 150, "localTransport": 50, "activities": 90 }
+      }
+    },
+    "it": {
+      "name": "Italy",
+      "currency": "EUR",
+      "source": "Istat & Numbeo 2025",
+      "year": 2025,
+      "retrievedAt": "2025-01-15T00:00:00Z",
+      "fuelPricePerLiterUsd": 1.98,
+      "taxiBaseFareUsd": 6.50,
+      "tiers": {
+        "budget": { "accommodation": 50, "food": 28, "localTransport": 9, "activities": 15 },
+        "mid": { "accommodation": 120, "food": 60, "localTransport": 18, "activities": 35 },
+        "luxury": { "accommodation": 300, "food": 140, "localTransport": 45, "activities": 85 }
+      }
+    },
+    "es": {
+      "name": "Spain",
+      "currency": "EUR",
+      "source": "INE Spain & Numbeo 2025",
+      "year": 2025,
+      "retrievedAt": "2025-01-15T00:00:00Z",
+      "fuelPricePerLiterUsd": 1.72,
+      "taxiBaseFareUsd": 4.50,
+      "tiers": {
+        "budget": { "accommodation": 40, "food": 24, "localTransport": 8, "activities": 12 },
+        "mid": { "accommodation": 95, "food": 50, "localTransport": 15, "activities": 28 },
+        "luxury": { "accommodation": 240, "food": 115, "localTransport": 35, "activities": 70 }
+      }
+    },
+    "de": {
+      "name": "Germany",
+      "currency": "EUR",
+      "source": "Destatis & Numbeo 2025",
+      "year": 2025,
+      "retrievedAt": "2025-01-15T00:00:00Z",
+      "fuelPricePerLiterUsd": 1.92,
+      "taxiBaseFareUsd": 5.00,
+      "tiers": {
+        "budget": { "accommodation": 50, "food": 28, "localTransport": 10, "activities": 15 },
+        "mid": { "accommodation": 115, "food": 58, "localTransport": 20, "activities": 32 },
+        "luxury": { "accommodation": 270, "food": 130, "localTransport": 45, "activities": 80 }
+      }
+    },
+    "us": {
+      "name": "United States",
+      "currency": "USD",
+      "source": "US Bureau of Labor Statistics & Numbeo 2025",
+      "year": 2025,
+      "retrievedAt": "2025-01-15T00:00:00Z",
+      "fuelPricePerLiterUsd": 0.95,
+      "taxiBaseFareUsd": 4.00,
+      "tiers": {
+        "budget": { "accommodation": 65, "food": 35, "localTransport": 12, "activities": 20 },
+        "mid": { "accommodation": 150, "food": 75, "localTransport": 25, "activities": 45 },
+        "luxury": { "accommodation": 380, "food": 170, "localTransport": 60, "activities": 110 }
+      }
+    },
+    "jp": {
+      "name": "Japan",
+      "currency": "JPY",
+      "source": "Japan National Tourism Organization & Numbeo 2025",
+      "year": 2025,
+      "retrievedAt": "2025-01-15T00:00:00Z",
+      "fuelPricePerLiterUsd": 1.25,
+      "taxiBaseFareUsd": 3.80,
+      "tiers": {
+        "budget": { "accommodation": 45, "food": 25, "localTransport": 10, "activities": 15 },
+        "mid": { "accommodation": 110, "food": 55, "localTransport": 20, "activities": 35 },
+        "luxury": { "accommodation": 280, "food": 135, "localTransport": 50, "activities": 90 }
+      }
+    },
+    "ae": {
+      "name": "United Arab Emirates",
+      "currency": "AED",
+      "source": "Dubai Tourism & Numbeo 2025",
+      "year": 2025,
+      "retrievedAt": "2025-01-15T00:00:00Z",
+      "fuelPricePerLiterUsd": 0.85,
+      "taxiBaseFareUsd": 3.50,
+      "tiers": {
+        "budget": { "accommodation": 55, "food": 30, "localTransport": 10, "activities": 20 },
+        "mid": { "accommodation": 140, "food": 70, "localTransport": 22, "activities": 55 },
+        "luxury": { "accommodation": 390, "food": 180, "localTransport": 65, "activities": 140 }
+      }
+    },
+    "gb": {
+      "name": "United Kingdom",
+      "currency": "GBP",
+      "source": "VisitBritain & Numbeo 2025",
+      "year": 2025,
+      "retrievedAt": "2025-01-15T00:00:00Z",
+      "fuelPricePerLiterUsd": 1.88,
+      "taxiBaseFareUsd": 5.20,
+      "tiers": {
+        "budget": { "accommodation": 60, "food": 32, "localTransport": 12, "activities": 18 },
+        "mid": { "accommodation": 140, "food": 70, "localTransport": 22, "activities": 40 },
+        "luxury": { "accommodation": 340, "food": 160, "localTransport": 55, "activities": 95 }
+      }
+    },
+    "ch": {
+      "name": "Switzerland",
+      "currency": "CHF",
+      "source": "Switzerland Tourism & Numbeo 2025",
+      "year": 2025,
+      "retrievedAt": "2025-01-15T00:00:00Z",
+      "fuelPricePerLiterUsd": 2.10,
+      "taxiBaseFareUsd": 8.50,
+      "tiers": {
+        "budget": { "accommodation": 80, "food": 45, "localTransport": 18, "activities": 25 },
+        "mid": { "accommodation": 190, "food": 95, "localTransport": 35, "activities": 60 },
+        "luxury": { "accommodation": 460, "food": 220, "localTransport": 80, "activities": 140 }
+      }
+    },
+    "au": {
+      "name": "Australia",
+      "currency": "AUD",
+      "source": "Tourism Australia & Numbeo 2025",
+      "year": 2025,
+      "retrievedAt": "2025-01-15T00:00:00Z",
+      "fuelPricePerLiterUsd": 1.35,
+      "taxiBaseFareUsd": 4.50,
+      "tiers": {
+        "budget": { "accommodation": 55, "food": 32, "localTransport": 11, "activities": 20 },
+        "mid": { "accommodation": 130, "food": 68, "localTransport": 22, "activities": 45 },
+        "luxury": { "accommodation": 320, "food": 155, "localTransport": 55, "activities": 105 }
+      }
+    },
+    "id": {
+      "name": "Indonesia",
+      "currency": "IDR",
+      "source": "Wonderful Indonesia & Numbeo 2025",
+      "year": 2025,
+      "retrievedAt": "2025-01-15T00:00:00Z",
+      "fuelPricePerLiterUsd": 0.88,
+      "taxiBaseFareUsd": 0.70,
+      "tiers": {
+        "budget": { "accommodation": 18, "food": 10, "localTransport": 4, "activities": 6 },
+        "mid": { "accommodation": 50, "food": 25, "localTransport": 10, "activities": 18 },
+        "luxury": { "accommodation": 160, "food": 65, "localTransport": 30, "activities": 50 }
+      }
+    },
+    "th": {
+      "name": "Thailand",
+      "currency": "THB",
+      "source": "Tourism Authority of Thailand & Numbeo 2025",
+      "year": 2025,
+      "retrievedAt": "2025-01-15T00:00:00Z",
+      "fuelPricePerLiterUsd": 1.10,
+      "taxiBaseFareUsd": 1.05,
+      "tiers": {
+        "budget": { "accommodation": 20, "food": 12, "localTransport": 4, "activities": 7 },
+        "mid": { "accommodation": 55, "food": 28, "localTransport": 12, "activities": 22 },
+        "luxury": { "accommodation": 180, "food": 75, "localTransport": 35, "activities": 60 }
+      }
+    },
+    "is": {
+      "name": "Iceland",
+      "currency": "ISK",
+      "source": "Visit Iceland & Numbeo 2025",
+      "year": 2025,
+      "retrievedAt": "2025-01-15T00:00:00Z",
+      "fuelPricePerLiterUsd": 2.25,
+      "taxiBaseFareUsd": 6.80,
+      "tiers": {
+        "budget": { "accommodation": 75, "food": 40, "localTransport": 15, "activities": 25 },
+        "mid": { "accommodation": 180, "food": 90, "localTransport": 30, "activities": 60 },
+        "luxury": { "accommodation": 420, "food": 200, "localTransport": 75, "activities": 130 }
+      }
+    }
+  }
+}
