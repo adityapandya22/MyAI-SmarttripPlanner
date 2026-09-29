@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { findDestination, parseDaysFromText, runFreeAgent } from './freeAgent.mjs'
+import { findDestination, parseDaysFromText, runFreeAgent, getCurrencySymbol } from './freeAgent.mjs'
 
 describe('findDestination', () => {
   it('identifies Indian states by name', () => {
@@ -245,3 +245,79 @@ describe('runFreeAgent multi-day itinerary (8-10 days)', () => {
     expect(dayCalls[9].args.title).toContain('Farewell')
   })
 })
+
+describe('runFreeAgent multi-currency & pricing handling', () => {
+  it('correctly maps currency symbols', () => {
+    expect(getCurrencySymbol('INR')).toBe('₹')
+    expect(getCurrencySymbol('USD')).toBe('$')
+    expect(getCurrencySymbol('EUR')).toBe('€')
+    expect(getCurrencySymbol('GBP')).toBe('£')
+    expect(getCurrencySymbol('JPY')).toBe('¥')
+  })
+
+  it('uses USD currency and gas units when requested without hardcoded rupee symbols', async () => {
+    const calledTools = []
+    const broadcastEvents = []
+    const mockBridge = {
+      broadcast: (ev) => {
+        broadcastEvents.push(ev)
+      },
+      callBrowser: async (name, args) => {
+        calledTools.push({ name, args })
+        return { ok: true, result: {} }
+      },
+    }
+
+    await runFreeAgent('Plan a trip to Goa for 3 days', {
+      mode: 'interview',
+      currency: 'USD',
+      language: 'en',
+      bridge: mockBridge,
+      abortSignal: new AbortController().signal,
+    })
+
+    const metaCall = calledTools.find((c) => c.name === 'set_trip_meta')
+    expect(metaCall).toBeTruthy()
+    expect(metaCall.args.currency).toBe('USD')
+    expect(metaCall.args.car_gas_unit).toBe('usd_gal')
+
+    const textEvent = broadcastEvents.find((e) => e.type === 'assistant_text')
+    expect(textEvent).toBeTruthy()
+    expect(textEvent.text).toContain('$ (USD)')
+    expect(textEvent.text).not.toContain('₹ (USD)')
+    expect(textEvent.text).not.toContain('₹ USD')
+  })
+
+  it('uses EUR currency and eur_l gas unit when requested', async () => {
+    const calledTools = []
+    const broadcastEvents = []
+    const mockBridge = {
+      broadcast: (ev) => {
+        broadcastEvents.push(ev)
+      },
+      callBrowser: async (name, args) => {
+        calledTools.push({ name, args })
+        return { ok: true, result: {} }
+      },
+    }
+
+    await runFreeAgent('Plan a trip to Rajasthan for 3 days', {
+      mode: 'interview',
+      currency: 'EUR',
+      language: 'en',
+      bridge: mockBridge,
+      abortSignal: new AbortController().signal,
+    })
+
+    const metaCall = calledTools.find((c) => c.name === 'set_trip_meta')
+    expect(metaCall).toBeTruthy()
+    expect(metaCall.args.currency).toBe('EUR')
+    expect(metaCall.args.car_gas_unit).toBe('eur_l')
+
+    const textEvent = broadcastEvents.find((e) => e.type === 'assistant_text')
+    expect(textEvent).toBeTruthy()
+    expect(textEvent.text).toContain('€ (EUR)')
+    expect(textEvent.text).not.toContain('₹ (EUR)')
+  })
+})
+

@@ -154,11 +154,38 @@ function intentMatches(text, ...words) {
   return words.some((w) => new RegExp(`(?:^|\\s)${w}(?:\\s|$|[.,!?])`).test(lower))
 }
 
+export function getCurrencySymbol(currencyCode) {
+  const map = {
+    INR: '₹',
+    USD: '$',
+    EUR: '€',
+    GBP: '£',
+    JPY: '¥',
+    CAD: 'CA$',
+    AUD: 'A$',
+    CHF: 'CHF',
+    AED: 'AED',
+    THB: '฿',
+    SGD: 'S$',
+  }
+  return map[currencyCode?.toUpperCase()] || currencyCode || '$'
+}
+
 /**
  * Normalizes an attraction into a structured object with verified/deterministic coordinates,
  * authentic description, area/theme, and estimated budget.
  */
-function resolveAttraction(item, stateCoords, stateName, index) {
+function resolveAttraction(item, stateCoords, stateName, index, currency = 'INR') {
+  const basePriceInr = (typeof item === 'object' && item !== null && item.price != null)
+    ? item.price
+    : ((typeof item === 'object' && item !== null && item.estPrice != null) ? item.estPrice : 200)
+
+  let price = basePriceInr
+  if (currency === 'USD') price = Math.round(basePriceInr / 80) || 3
+  else if (currency === 'EUR') price = Math.round(basePriceInr / 90) || 3
+  else if (currency === 'GBP') price = Math.round(basePriceInr / 105) || 2
+  else if (currency === 'JPY') price = Math.round((basePriceInr / 80) * 155) || 400
+
   if (typeof item === 'object' && item !== null) {
     return {
       name: item.name,
@@ -166,7 +193,7 @@ function resolveAttraction(item, stateCoords, stateName, index) {
       lng: Number(item.lng.toFixed(4)),
       desc: item.desc || `Iconic landmark in ${stateName}. Guided exploration, architecture, and photography.`,
       area: item.area || 'Highlights',
-      price: item.estPrice ?? 200,
+      price,
     }
   }
   // Deterministic spread around state coordinates (no Math.random())
@@ -178,17 +205,17 @@ function resolveAttraction(item, stateCoords, stateName, index) {
     lng: Number((stateCoords.lng + lngOffset).toFixed(4)),
     desc: `Historic landmark in ${stateName}. Scenic exploration, cultural heritage, and photography.`,
     area: 'Highlights',
-    price: 200,
+    price,
   }
 }
 
 /**
  * Group attractions by area or theme.
  */
-function groupAttractionsByArea(attractions, stateCoords, stateName) {
+function groupAttractionsByArea(attractions, stateCoords, stateName, currency = 'INR') {
   const groups = new Map()
   attractions.forEach((att, i) => {
-    const data = resolveAttraction(att, stateCoords, stateName, i)
+    const data = resolveAttraction(att, stateCoords, stateName, i, currency)
     const area = data.area || 'Highlights'
     if (!groups.has(area)) groups.set(area, [])
     groups.get(area).push(data)
@@ -259,14 +286,18 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
     const checkin = deriveDateStr(startDate, 0)
     const checkout = deriveDateStr(startDate, 1)
 
-    // 1. Set Trip Meta (with title-cased name and INR currency)
-    bridge.broadcast({ type: 'agent_tool', name: 'set_trip_meta', args: { title: `Trip to ${titleCasedDest}`, currency: cur, car_gas_unit: 'inr_l' } })
+    // 1. Set Trip Meta (with title-cased name and dynamic currency/fuel)
+    const gasUnit = cur === 'INR' ? 'inr_l' : (cur === 'USD' ? 'usd_gal' : (cur === 'EUR' ? 'eur_l' : 'usd_l'))
+    const gasPrice = gasUnit === 'inr_l' ? 96 : (gasUnit === 'usd_gal' ? 3.5 : (gasUnit === 'eur_l' ? 1.8 : 1.5))
+    const curSymbol = getCurrencySymbol(cur)
+
+    bridge.broadcast({ type: 'agent_tool', name: 'set_trip_meta', args: { title: `Trip to ${titleCasedDest}`, currency: cur, car_gas_unit: gasUnit } })
     try {
       await bridge.callBrowser('set_trip_meta', {
         title: `Trip to ${titleCasedDest}`,
         currency: cur,
-        car_gas_unit: 'inr_l',
-        car_gas_price: 96,
+        car_gas_unit: gasUnit,
+        car_gas_price: gasPrice,
         car_model: 'SUV / Compact Crossover',
       })
     } catch (err) {
@@ -282,8 +313,8 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
     }
 
     const introMsg = isIt
-      ? `Ciao! Ho iniziato a strutturare il tuo itinerario a **${destName}** (${daysCount} giorni) calcolato interamente in **${cur === 'INR' ? '₹ (Rupie)' : cur}**!`
-      : `Namaste! I've started building your personalized **${destName}** itinerary (${daysCount} days) with all expenses calculated in **₹ (${cur})**!`
+      ? `Ciao! Ho iniziato a strutturare il tuo itinerario a **${destName}** (${daysCount} giorni) calcolato interamente in **${cur === 'INR' ? '₹ (Rupie)' : `${curSymbol} (${cur})`}**!`
+      : `Namaste! I've started building your personalized **${destName}** itinerary (${daysCount} days) with all expenses calculated in **${curSymbol} (${cur})**!`
 
     await streamText(bridge, introMsg + '\n\n', abortSignal, 12)
 
@@ -298,7 +329,7 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
         'Cultural Center & Classical Evening Folk Dance',
       ]
 
-    const areaGroups = groupAttractionsByArea(rawAttractions, coords, destName)
+    const areaGroups = groupAttractionsByArea(rawAttractions, coords, destName, cur)
     const areas = Array.from(areaGroups.keys())
 
     let totalStopsCount = 0
@@ -395,7 +426,7 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
           duration_min: 75,
           lat: lunchCoords.lat,
           lng: lunchCoords.lng,
-          price: 600,
+          price: cur === 'INR' ? 600 : (cur === 'USD' ? 8 : (cur === 'EUR' ? 7 : (cur === 'GBP' ? 6 : (cur === 'JPY' ? 1200 : 8)))),
           notes: `Savor traditional ${destName} specialties, authentic thalis, and regional flavors.`,
         },
         {
@@ -504,7 +535,7 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
     let providerStatusText = ''
     if (hasHotels) {
       providerStatusText = isMock
-        ? `Hotel recommendations for ${stateCapital} were generated using realistic India mock providers for offline demonstration (with authentic ₹ INR rates).`
+        ? `Hotel recommendations for ${stateCapital} were generated using realistic mock providers for offline demonstration (with authentic ${cur === 'INR' ? '₹ INR' : `${curSymbol} ${cur}`} rates).`
         : `Verified accommodations and authentic dining spots in ${stateCapital} were researched via live providers.`
     } else {
       providerStatusText = `Live hotel search returned no direct bookings for these dates; default estimated budgets have been applied.`
@@ -512,8 +543,8 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
 
     // 6. Concluding message with honest status and exact counts
     const summaryText = isIt
-      ? `Ecco pronto il tuo programma! Ho organizzato ${daysCount} giorni con ${totalStopsCount} tappe con orari scaglionati (09:30, 12:30, 15:30, 18:30) e budget stimato in **${cur === 'INR' ? '₹' : cur} ${totalEstimatedBudget.toLocaleString()}**.\n\n*Stato provider:* ${providerStatusText}\n\nPuoi chiedermi modifiche in qualsiasi momento in chat!`
-      : `Your **${destName}** itinerary is ready! I've laid out ${daysCount} days with ${totalStopsCount} planned stops at staggered times (morning sightseeing at 09:30, authentic dining at 12:30, afternoon landmarks at 15:30, and evening viewpoints at 18:30) with all expenses calculated in **₹ ${cur}** (estimated activity & dining budget: **₹${totalEstimatedBudget.toLocaleString('en-IN')}**).\n\n*Provider status:* ${providerStatusText}\n\nYou can ask me anytime to adjust days, find more spots, or change your travel style!`
+      ? `Ecco pronto il tuo programma! Ho organizzato ${daysCount} giorni con ${totalStopsCount} tappe con orari scaglionati (09:30, 12:30, 15:30, 18:30) e budget stimato in **${curSymbol} ${totalEstimatedBudget.toLocaleString()}**.\n\n*Stato provider:* ${providerStatusText}\n\nPuoi chiedermi modifiche in qualsiasi momento in chat!`
+      : `Your **${destName}** itinerary is ready! I've laid out ${daysCount} days with ${totalStopsCount} planned stops at staggered times (morning sightseeing at 09:30, authentic dining at 12:30, afternoon landmarks at 15:30, and evening viewpoints at 18:30) with all expenses calculated in **${curSymbol} ${cur}** (estimated activity & dining budget: **${curSymbol}${totalEstimatedBudget.toLocaleString(cur === 'INR' ? 'en-IN' : 'en-US')}**).\n\n*Provider status:* ${providerStatusText}\n\nYou can ask me anytime to adjust days, find more spots, or change your travel style!`
 
     await streamText(bridge, summaryText, abortSignal, 12)
     bridge.broadcast({ type: 'assistant_text', text: introMsg + '\n\n' + summaryText })
@@ -607,7 +638,9 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
   }
 
   // General helpful response
-  const generalReply = `I am your AI travel copilot! I've noted: "${text}". I can add stops, search for verified hotels on Booking.com, find local food spots, or adjust your travel days and budget in ₹ Rupees. What would you like to tweak?`
+  const generalCurSymbol = getCurrencySymbol(cur)
+  const generalCurName = cur === 'INR' ? '₹ Rupees' : `${generalCurSymbol} ${cur}`
+  const generalReply = `I am your AI travel copilot! I've noted: "${text}". I can add stops, search for verified hotels on Booking.com, find local food spots, or adjust your travel days and budget in ${generalCurName}. What would you like to tweak?`
   await streamText(bridge, generalReply, abortSignal)
   bridge.broadcast({ type: 'assistant_text', text: generalReply })
 }
@@ -630,8 +663,9 @@ export async function runOpenAiCompat(text, {
     throw new Error('API Key missing. Enter your free Google Gemini or Groq API Key.')
   }
 
+  const curSymbol = getCurrencySymbol(currency)
   const systemPrompt = `You are Ulisse, an expert AI travel planner assisting the user to create and refine the perfect trip.
-Currency: ${currency}. All prices must be quoted in ${currency} (use ₹ symbol for INR).
+Currency: ${currency}. All prices must be quoted in ${currency} (symbol: ${curSymbol}).
 Always use the provided trip tools to make actual edits to the trip.
 Keep your conversational responses helpful, direct, and concise.`
 
