@@ -23,6 +23,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "test": "vitest run",
+    "smoke": "node scripts/smoke.mjs",
     "site:dev": "cd site && vite",
     "site:build": "cd site && vite build",
     "demo:build": "VITE_DEMO=1 vite build --base=/demo/ --outDir dist-site/demo --emptyOutDir",

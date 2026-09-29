@@ -119,7 +119,11 @@ For development, with hot reload:
 
 ```sh
 npm run dev      # Vite dev server (http://localhost:5199) + agent server (5200)
+npm run smoke    # Run live end-to-end smoke test against real services
 ```
+
+> [!TIP]
+> **Windows PowerShell Users**: If PowerShell blocks script execution (`PSSecurityException`), run commands with `npm.cmd` (e.g. `npm.cmd run dev`, `npm.cmd test`, `npm.cmd run smoke`) or enable execution policy via `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`.
 
 ### No terminal: double-click to launch
 

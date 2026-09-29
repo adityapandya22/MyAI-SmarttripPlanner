@@ -8,6 +8,8 @@ import {
   validateTrip,
   formatZodError,
   createStorage,
+  SCHEMA_VERSION,
+  migrateTrip,
 } from './storage.mjs'
 
 describe('Trip Schema Validation', () => {
@@ -276,4 +278,63 @@ describe('Storage Integration with Validation', () => {
     const resObj = JSON.parse(responseBody)
     expect(resObj.ok).toBe(true)
   })
+
+  it('migrates older trips by upgrading img to imgs and setting schemaVersion', () => {
+    const legacyTrip = {
+      id: 'legacy-trip-1',
+      title: 'Legacy Tour',
+      days: [
+        {
+          id: 'day-1',
+          title: 'Arrival',
+          items: [
+            {
+              id: 'it-1',
+              title: 'Sight',
+              type: 'activity',
+              img: 'https://example.com/photo.jpg',
+            },
+          ],
+        },
+      ],
+    }
+
+    const migrated = migrateTrip(legacyTrip)
+    expect(migrated.schemaVersion).toBe(SCHEMA_VERSION)
+    expect(migrated.days[0].items[0].imgs).toEqual(['https://example.com/photo.jpg'])
+    expect(migrated.days[0].items[0].img).toBeUndefined()
+
+    const validated = validateTrip(legacyTrip, { requireId: true })
+    expect(validated.schemaVersion).toBe(SCHEMA_VERSION)
+    expect(validated.days[0].items[0].imgs).toEqual(['https://example.com/photo.jpg'])
+  })
+
+  it('validates trips with international currencies (JPY, AED, EUR, USD, INR)', () => {
+    const tokyoTrip = {
+      id: 'tokyo-trip',
+      title: 'Trip to Tokyo',
+      currency: 'JPY',
+      days: [],
+    }
+    const validated = validateTrip(tokyoTrip, { requireId: true })
+    expect(validated.currency).toBe('JPY')
+  })
+
+  it('scanTrips skips corrupted trip files without throwing or crashing', () => {
+    const tripsFolder = join(testDir, 'trips')
+    writeFileSync(join(tripsFolder, 'corrupt-trip.json'), '{ this is invalid json syntax', 'utf8')
+
+    const validTrip = {
+      id: 'valid-after-corrupt',
+      title: 'Valid Trip',
+      days: [],
+    }
+    storage.saveTrip(validTrip)
+
+    const result = storage.scanTrips()
+    expect(result.trips.some((t) => t.id === 'valid-after-corrupt')).toBe(true)
+    expect(result.errors.length).toBeGreaterThan(0)
+    expect(result.errors.some((e) => e.file.includes('corrupt-trip.json'))).toBe(true)
+  })
 })
+

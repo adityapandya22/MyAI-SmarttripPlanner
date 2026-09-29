@@ -11,6 +11,8 @@ server/codex-workspace/*/AGENTS.md
 # private planning notes — keep out of the public repo
 docs/going-public-plan.md
 HANDOFF.md
+prompt*.txt
+FINAL COMPLETION
 
 # local user data and secrets — never commit
 /data/

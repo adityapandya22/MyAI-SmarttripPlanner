@@ -170,9 +170,12 @@ export const CenterSchema = z
   .nullable()
   .optional()
 
+export const SCHEMA_VERSION = 2
+
 export const TripSchema = z
   .object({
     id: z.string({ error: 'Trip id is required' }).min(1, 'Trip id is required'),
+    schemaVersion: z.number().optional(),
     title: z.string().optional(),
     subtitle: z.string().optional(),
     startDate: z.string().optional(),
@@ -180,7 +183,7 @@ export const TripSchema = z
     brief: z.string().optional(),
     notes: z.string().optional(),
     transport: z.enum(['car', 'walk', 'transit', 'mixed']).optional(),
-    currency: z.enum(['INR', 'EUR', 'USD']).nullable().optional(),
+    currency: z.string().nullable().optional(),
     center: CenterSchema,
     days: z.array(DaySchema).optional(),
     checklist: z.array(ChecklistItemSchema).optional(),
@@ -200,12 +203,51 @@ export function formatZodError(error) {
     .join('; ')
 }
 
+/**
+ * Upgrade older trip payloads (e.g. legacy single `img` fields, missing schemaVersion).
+ */
+export function migrateTrip(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw
+  const t = { ...raw }
+
+  // 1. Migrate single img to imgs array in day items
+  if (Array.isArray(t.days)) {
+    t.days = t.days.map((d) => {
+      if (!d || typeof d !== 'object') return d
+      const day = { ...d }
+      if (Array.isArray(day.items)) {
+        day.items = day.items.map((it) => {
+          if (!it || typeof it !== 'object') return it
+          const item = { ...it }
+          if (item.img && (!Array.isArray(item.imgs) || item.imgs.length === 0)) {
+            item.imgs = [item.img]
+            delete item.img
+          }
+          if (item.dur != null && typeof item.dur !== 'number') {
+            item.dur = Number(item.dur) || 0
+          }
+          if (item.price != null && typeof item.price !== 'number') {
+            item.price = Number(item.price) || 0
+          }
+          return item
+        })
+      }
+      return day
+    })
+  }
+
+  // 2. Set updated schema version
+  t.schemaVersion = SCHEMA_VERSION
+  return t
+}
+
 export function validateTrip(rawTrip, { requireId = true } = {}) {
   if (!rawTrip || typeof rawTrip !== 'object' || Array.isArray(rawTrip)) {
     throw new Error('Trip data must be a valid non-empty object')
   }
+  const migrated = migrateTrip(rawTrip)
   const schema = requireId ? TripSchema : ImportTripSchema
-  const result = schema.safeParse(rawTrip)
+  const result = schema.safeParse(migrated)
   if (!result.success) {
     throw new Error(`Trip validation error: ${formatZodError(result.error)}`)
   }

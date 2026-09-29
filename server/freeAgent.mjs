@@ -303,6 +303,7 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
 
     let totalStopsCount = 0
     let totalEstimatedBudget = 0
+    const usedCoords = new Set()
 
     // Schedule 3-4 stops per day at staggered times: 09:30, 12:30, 15:30, 18:30
     for (let dayNum = 1; dayNum <= daysCount; dayNum++) {
@@ -423,6 +424,21 @@ export async function runFreeAgent(text, { mode, currency = 'INR', language = 'e
         if (abortSignal?.aborted) return
         totalStopsCount++
         totalEstimatedBudget += act.price
+
+        // Ensure distinct coordinates across the entire trip
+        let stopLat = act.lat
+        let stopLng = act.lng
+        let coordKey = `${stopLat.toFixed(4)},${stopLng.toFixed(4)}`
+        let jitter = 0
+        while (usedCoords.has(coordKey) && jitter < 15) {
+          jitter++
+          stopLat = Number((stopLat + (jitter % 2 === 0 ? 0.0022 : -0.0022) * jitter).toFixed(4))
+          stopLng = Number((stopLng + (jitter % 2 === 0 ? -0.0022 : 0.0022) * jitter).toFixed(4))
+          coordKey = `${stopLat.toFixed(4)},${stopLng.toFixed(4)}`
+        }
+        usedCoords.add(coordKey)
+        act.lat = stopLat
+        act.lng = stopLng
 
         bridge.broadcast({
           type: 'agent_tool',

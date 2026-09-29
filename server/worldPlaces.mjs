@@ -679,6 +679,15 @@ export function classifyCandidate(cand) {
   const type = String(cand.type || '').toLowerCase()
   const addresstype = String(cand.addresstype || '').toLowerCase()
   const candClass = String(cand.class || '').toLowerCase()
+  const name = String(cand.name || '').toLowerCase()
+
+  // Famous tourist island and region destinations (e.g. Bali, Phuket, Ibiza, Santorini)
+  if (
+    ['bali', 'phuket', 'ibiza', 'santorini', 'mallorca', 'tenerife', 'crete', 'oahu', 'maui'].includes(name) ||
+    Boolean(BUNDLED_CITIES_ATTRACTIONS[name])
+  ) {
+    return { isCity: true, type: 'city' }
+  }
 
   const cityTypes = new Set([
     'city',
@@ -722,9 +731,39 @@ export function resolveCandidates(candidates, originalQuery) {
     return { status: 'single', result: matches[0] }
   }
 
+  // Deduplicate candidates that represent the same destination/metro area
+  // (e.g. Nominatim returning city node + administrative relation for Paris, France or Dubai, UAE)
+  const distinctDestinations = []
+  for (const cand of matches) {
+    const candLat = Number(cand.lat)
+    const candLon = Number(cand.lon)
+    const candCountry = cand.address?.country_code || ''
+    const isDuplicate = distinctDestinations.some((existing) => {
+      const exLat = Number(existing.lat)
+      const exLon = Number(existing.lon)
+      const exCountry = existing.address?.country_code || ''
+      if (candCountry && exCountry && candCountry.toLowerCase() === exCountry.toLowerCase()) {
+        const dist = (!isNaN(candLat) && !isNaN(candLon) && !isNaN(exLat) && !isNaN(exLon))
+          ? haversineKm(candLat, candLon, exLat, exLon)
+          : 0
+        if (cand.name?.toLowerCase() === existing.name?.toLowerCase() || dist < 250) {
+          return true
+        }
+      }
+      return false
+    })
+    if (!isDuplicate) {
+      distinctDestinations.push(cand)
+    }
+  }
+
+  if (distinctDestinations.length === 1) {
+    return { status: 'single', result: distinctDestinations[0] }
+  }
+
   // Check importance gap between top candidate and runner-up
-  const top = matches[0]
-  const second = matches[1]
+  const top = distinctDestinations[0]
+  const second = distinctDestinations[1]
   const topImp = Number(top.importance || 0)
   const secondImp = Number(second.importance || 0)
 
@@ -736,7 +775,7 @@ export function resolveCandidates(candidates, originalQuery) {
   // Otherwise, ambiguous: e.g. Paris (France) vs Paris (Texas)
   return {
     status: 'disambiguate',
-    candidates: matches.slice(0, 3).map((c) => ({
+    candidates: distinctDestinations.slice(0, 3).map((c) => ({
       name: c.name,
       display_name: c.display_name,
       lat: Number(c.lat),
@@ -896,12 +935,24 @@ export async function handleWorldPlacesHttp(req, res) {
   const [path, queryStr] = (req.url || '').split('?')
   if (!path.startsWith('/api/places')) return false
 
+  // Set standard CORS headers for browser fetch support
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept')
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204)
+    res.end()
+    return true
+  }
+
   const params = new URLSearchParams(queryStr || '')
 
   // GET /api/places/search?q=... (Autocomplete / geocoding)
   if (req.method === 'GET' && path === '/api/places/search') {
-    const q = params.get('q') || ''
-    if (!q || q.trim().length < 2) {
+    // Sanitize and cap input length to 200 characters
+    const q = (params.get('q') || '').trim().slice(0, 200)
+    if (!q || q.length < 2) {
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ ok: true, candidates: [] }))
       return true
@@ -930,11 +981,11 @@ export async function handleWorldPlacesHttp(req, res) {
   if (req.method === 'GET' && path === '/api/places/attractions') {
     const lat = parseFloat(params.get('lat'))
     const lng = parseFloat(params.get('lng'))
-    const name = params.get('name') || 'Destination'
+    const name = (params.get('name') || 'Destination').trim().slice(0, 200)
 
-    if (isNaN(lat) || isNaN(lng)) {
+    if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
       res.writeHead(400, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ ok: false, error: 'Missing valid lat/lng coordinates.' }))
+      res.end(JSON.stringify({ ok: false, error: 'Missing or invalid lat/lng coordinates.' }))
       return true
     }
 
@@ -969,6 +1020,17 @@ export async function handleWorldwideInterview({
 }) {
   const { cleaned, days } = normalizeQuery(text)
   if (!cleaned || cleaned.length < 2) return false
+
+  const GENERIC_VIBES = new Set([
+    'sunny', 'warm', 'cold', 'anywhere', 'somewhere', 'relaxing', 'adventure', 'fun',
+    'nice', 'good', 'cheap', 'budget', 'luxury', 'beach', 'beaches', 'mountains', 'nature',
+  ])
+  if (GENERIC_VIBES.has(cleaned.toLowerCase())) {
+    const askMsg = `Which destination did you mean? Please name a specific city or region (e.g. "Paris", "Tokyo", "Dubai", "Goa").`
+    await streamText(bridge, askMsg, abortSignal, 12)
+    bridge.broadcast({ type: 'assistant_text', text: askMsg })
+    return true
+  }
 
   // 1. Check for multi-city trip: e.g. "Kyoto and Osaka", "Tokyo and Kyoto"
   const multiCityMatch = cleaned.match(/^([A-Za-z\u00C0-\u024F\s]+?)\s+(?:and|&|\+)\s+([A-Za-z\u00C0-\u024F\s]+)$/i)
@@ -1183,6 +1245,7 @@ export async function handleWorldwideInterview({
   let totalStopsCount = 0
   let totalEstimatedBudget = 0
   let prevLastStop = null
+  const usedCoords = new Set()
 
   for (let dayNum = 1; dayNum <= daysCount; dayNum++) {
     if (abortSignal?.aborted) return true
@@ -1238,6 +1301,21 @@ export async function handleWorldwideInterview({
       if (abortSignal?.aborted) return true
       totalStopsCount++
       totalEstimatedBudget += act.price
+
+      // Ensure distinct coordinates across the entire trip
+      let stopLat = act.lat
+      let stopLng = act.lng
+      let coordKey = `${stopLat.toFixed(4)},${stopLng.toFixed(4)}`
+      let jitter = 0
+      while (usedCoords.has(coordKey) && jitter < 15) {
+        jitter++
+        stopLat = Number((stopLat + (jitter % 2 === 0 ? 0.0022 : -0.0022) * jitter).toFixed(4))
+        stopLng = Number((stopLng + (jitter % 2 === 0 ? -0.0022 : 0.0022) * jitter).toFixed(4))
+        coordKey = `${stopLat.toFixed(4)},${stopLng.toFixed(4)}`
+      }
+      usedCoords.add(coordKey)
+      act.lat = stopLat
+      act.lng = stopLng
 
       bridge.broadcast({
         type: 'agent_tool',
