@@ -8,6 +8,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000,
   },
   server: {
+    host: true,
     port: Number(process.env.VITE_PORT || 5199),
     /* storage refs are relative URLs (/storage/images/...): in dev they
        must reach the agent server on 5200 (or PORT / VITE_AGENT_PORT) */

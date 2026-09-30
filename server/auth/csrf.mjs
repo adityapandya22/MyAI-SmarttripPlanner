@@ -2,18 +2,8 @@ export function getAllowedOrigins(port = 5200) {
   const vitePort = Number(process.env.VITE_PORT || 5199)
   const allowed = new Set([
     `http://localhost:${port}`,
+    `https://localhost:${port}`,
     `http://127.0.0.1:${port}`,
-<<<<<<< HEAD
-    `http://localhost:5199`,
-    `http://127.0.0.1:5199`,
-    `http://localhost:5173`,
-    `http://127.0.0.1:5173`,
-    `https://localhost:${port}`,
-    `https://127.0.0.1:${port}`,
-    `https://localhost:5199`,
-    `https://127.0.0.1:5199`,
-=======
-    `https://localhost:${port}`,
     `https://127.0.0.1:${port}`,
     // Vite dev server ports
     'http://localhost:5199',
@@ -25,7 +15,6 @@ export function getAllowedOrigins(port = 5200) {
     // Site preview ports
     'http://localhost:5300',
     'http://127.0.0.1:5300',
->>>>>>> 8693e58 (Consumer bridge mode, provider status, model config, destination aliases)
   ])
 
   if (process.env.ALLOWED_ORIGINS) {
@@ -52,8 +41,8 @@ export function verifyCsrf(req, port = 5200) {
   }
 
   // 1. Verify custom anti-CSRF header
-  const xRequestedWith = req.headers['x-requested-with']
-  if (xRequestedWith !== 'fetch' && xRequestedWith !== 'XMLHttpRequest') {
+  const xRequestedWith = String(req.headers['x-requested-with'] || '').toLowerCase()
+  if (xRequestedWith !== 'fetch' && xRequestedWith !== 'xmlhttprequest') {
     return { ok: false, status: 403, error: 'Missing or invalid X-Requested-With header' }
   }
 

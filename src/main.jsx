@@ -7,10 +7,13 @@ import './demo/boot'
 import './i18n'
 import App from './App.jsx'
 import DemoBadge from './demo/DemoBadge.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary section="Root">
+      <App />
+    </ErrorBoundary>
     {import.meta.env.VITE_DEMO === '1' && <DemoBadge />}
   </StrictMode>,
 )

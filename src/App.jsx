@@ -22,6 +22,12 @@ import Dashboard from './components/Dashboard'
 import ConfirmDialog from './components/ConfirmDialog'
 import Toast from './components/Toast'
 import ErrorBoundary from './components/ErrorBoundary'
+import LoginPage from './components/auth/LoginPage'
+import SignupPage from './components/auth/SignupPage'
+import ProfilePage from './components/auth/ProfilePage'
+import AdminModal from './components/AdminModal'
+import { useRouter, navigate } from './lib/router'
+import { useAuth, initAuthTripSync } from './agent/authStore'
 
 const isMobileNow = () => window.innerWidth < 1024
 
@@ -116,6 +122,60 @@ export default function App() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [setPicking, closeEditor, closeDayEditor, setChatOpen])
+
+  const { path } = useRouter()
+  const user = useAuth((s) => s.user)
+  const authLoading = useAuth((s) => s.loading)
+  const checkAuth = useAuth((s) => s.checkAuth)
+
+  useEffect(() => {
+    checkAuth()
+    initAuthTripSync()
+  }, [checkAuth])
+
+  /* Protected route guard: only logged-in users can view or edit trips */
+  useEffect(() => {
+    if (!authLoading && !user && activeId) {
+      useTrip.getState().closeTrip()
+      navigate('/login')
+    }
+  }, [authLoading, user, activeId])
+
+  if (path === '/login') {
+    return (
+      <ErrorBoundary section="Login">
+        <LoginPage />
+        <Toast />
+      </ErrorBoundary>
+    )
+  }
+
+  if (path === '/signup') {
+    return (
+      <ErrorBoundary section="Signup">
+        <SignupPage />
+        <Toast />
+      </ErrorBoundary>
+    )
+  }
+
+  if (path === '/profile') {
+    return (
+      <ErrorBoundary section="Profile">
+        <ProfilePage />
+        <Toast />
+      </ErrorBoundary>
+    )
+  }
+
+  if (path === '/admin' || path === '/admin/dashboard') {
+    return (
+      <ErrorBoundary section="Admin">
+        <AdminModal open={true} onClose={() => navigate('/')} />
+        <Toast />
+      </ErrorBoundary>
+    )
+  }
 
   const leftTab = ['checklist', 'suggestions'].includes(tab) ? tab : 'itinerary'
 

@@ -22,8 +22,8 @@ const COMMON_PASSWORDS = new Set([
 ])
 
 export function validatePasswordStrength(password) {
-  if (typeof password !== 'string' || password.length < 10) {
-    return { valid: false, error: 'Password must be at least 10 characters long' }
+  if (typeof password !== 'string' || password.length < 8) {
+    return { valid: false, error: 'Password must be at least 8 characters long' }
   }
   if (COMMON_PASSWORDS.has(password.toLowerCase())) {
     return { valid: false, error: 'Password is too common and easily guessed' }

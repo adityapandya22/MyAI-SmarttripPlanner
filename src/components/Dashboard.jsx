@@ -15,9 +15,13 @@ import LanguageSwitcher from './LanguageSwitcher'
 import { StorageSetupCard, StorageSettingsRow } from './StorageCard'
 import IndiaStatesModal from './IndiaStatesModal'
 import AdminModal from './AdminModal'
+import UserMenu from './auth/UserMenu'
+import { useAuth } from '../agent/authStore'
+import { navigate } from '../lib/router'
 import { useAgentChat } from '../agent/socket'
 import { INDIA_STATES } from '../data/indiaStates'
 import { buildDestinationTrie } from '../lib/trie'
+import { api } from '../lib/api'
 
 export default function Dashboard() {
   const { t } = useTranslation()
@@ -62,14 +66,9 @@ export default function Dashboard() {
 
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/places/search?q=${encodeURIComponent(q)}`, {
-          signal: controller.signal,
-        })
-        if (res.ok) {
-          const data = await res.json()
-          setWorldSuggestions(data.candidates || [])
-          setSearchedQuery(q)
-        }
+        const data = await api.places.search(q, controller.signal)
+        setWorldSuggestions(data?.candidates || [])
+        setSearchedQuery(q)
       } catch (err) {
         if (err.name !== 'AbortError') {
           setWorldSuggestions([])
@@ -85,7 +84,14 @@ export default function Dashboard() {
     }
   }, [consumerPrompt])
 
+  const user = useAuth((s) => s.user)
+
   const handleConsumerQuickPlan = (prompt) => {
+    if (!user) {
+      toast('Please log in or sign up to create and save trips.')
+      navigate('/login')
+      return
+    }
     const query = (prompt || consumerPrompt).trim()
     if (!query) return
     const rawTitle = query.length > 35 ? query.slice(0, 35) + '…' : query
@@ -98,11 +104,21 @@ export default function Dashboard() {
 
   /* the primary path: a new trip is born as a conversation with the agent */
   const onCreateWithAgent = () => {
+    if (!user) {
+      toast('Please log in or sign up to create and save trips.')
+      navigate('/login')
+      return
+    }
     createTrip(t('store.newTrip'), 'interview')
   }
 
   /* discreet manual fallback */
   const onCreate = () => {
+    if (!user) {
+      toast('Please log in or sign up to create and save trips.')
+      navigate('/login')
+      return
+    }
     createTrip(newTitle.trim())
     setCreating(false)
     setNewTitle('')
@@ -110,6 +126,11 @@ export default function Dashboard() {
   }
 
   const onImportFile = (e) => {
+    if (!user) {
+      toast('Please log in or sign up to import trips.')
+      navigate('/login')
+      return
+    }
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
@@ -174,6 +195,7 @@ export default function Dashboard() {
             >
               <Plus size={16} strokeWidth={2.6} /> {t('store.newTrip')}
             </button>
+            <UserMenu />
           </div>
           <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={onImportFile} />
         </div>
@@ -344,29 +366,59 @@ export default function Dashboard() {
         )}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {trips.map((trip) => (
-            <TripCard
-              key={trip.id}
-              trip={trip}
-              onOpen={() => openTrip(trip.id)}
-              onDuplicate={() => { duplicateTrip(trip.id); toast(t('dashboard.toasts.duplicated')) }}
-              onDelete={() =>
-                ask(t('dashboard.confirmDelete', { title: trip.title }), () => {
-                  deleteTrip(trip.id)
-                  toast(t('dashboard.toasts.deleted'))
-                })
-              }
-            />
-          ))}
+          {!user ? (
+            <div className="sm:col-span-2 rounded-3xl border border-brand-200 bg-gradient-to-br from-brand-50/80 via-white to-orange-50/50 p-8 text-center shadow-md">
+              <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-rose-500 text-white shadow-lg shadow-brand-500/30 mb-4">
+                <Palmtree size={28} strokeWidth={2.4} />
+              </div>
+              <h3 className="font-display text-xl font-bold text-ink-900">
+                Your Personal Travel Hub
+              </h3>
+              <p className="mx-auto mt-2 max-w-md text-xs sm:text-sm text-ink-600 leading-relaxed">
+                Sign in or create an account to view and customize your trips, save interactive itineraries, and access preferences across all devices.
+              </p>
+              <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+                <button
+                  onClick={() => navigate('/login')}
+                  className="rounded-xl border border-ink-200 bg-white px-5 py-2.5 text-xs font-bold text-ink-800 shadow-sm hover:bg-ink-50 transition active:scale-95"
+                >
+                  Sign In
+                </button>
+                <button
+                  onClick={() => navigate('/signup')}
+                  className="rounded-xl bg-gradient-to-r from-brand-500 to-rose-500 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-brand-500/25 hover:from-brand-600 hover:to-rose-600 transition active:scale-95"
+                >
+                  Create Free Account
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {trips.map((trip) => (
+                <TripCard
+                  key={trip.id}
+                  trip={trip}
+                  onOpen={() => openTrip(trip.id)}
+                  onDuplicate={() => { duplicateTrip(trip.id); toast(t('dashboard.toasts.duplicated')) }}
+                  onDelete={() =>
+                    ask(t('dashboard.confirmDelete', { title: trip.title }), () => {
+                      deleteTrip(trip.id)
+                      toast(t('dashboard.toasts.deleted'))
+                    })
+                  }
+                />
+              ))}
 
-          <button
-            onClick={onCreateWithAgent}
-            className="flex min-h-44 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-ink-300 font-display text-sm font-bold text-ink-400 transition hover:border-brand-400 hover:bg-brand-50/40 hover:text-brand-600"
-          >
-            <Plus size={24} strokeWidth={2.4} />
-            {t('store.newTrip')}
-            <span className="font-sans text-[11px] font-medium text-ink-400">{t('dashboard.agentHint')}</span>
-          </button>
+              <button
+                onClick={onCreateWithAgent}
+                className="flex min-h-44 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-ink-300 font-display text-sm font-bold text-ink-400 transition hover:border-brand-400 hover:bg-brand-50/40 hover:text-brand-600"
+              >
+                <Plus size={24} strokeWidth={2.4} />
+                {t('store.newTrip')}
+                <span className="font-sans text-[11px] font-medium text-ink-400">{t('dashboard.agentHint')}</span>
+              </button>
+            </>
+          )}
         </div>
 
         <p className="mt-6 text-center text-xs text-ink-400">

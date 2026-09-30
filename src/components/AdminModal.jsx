@@ -6,6 +6,7 @@ import {
 import Modal from './Modal'
 import { useTrip, toast } from '../store'
 import { useAgentChat, sendAdminMessage } from '../agent/socket'
+import { api } from '../lib/api'
 
 export default function AdminModal({ open, onClose }) {
   /* guard: do not mount anything when the modal is closed */
@@ -24,10 +25,9 @@ function AdminModalInner({ open, onClose }) {
   // Check server auth state on mount/open
   useEffect(() => {
     if (!open) return
-    fetch('/api/auth/me')
-      .then((res) => res.json())
+    api.auth.me()
       .then((data) => {
-        if (data.authenticated && data.user?.role === 'admin') {
+        if (data?.authenticated && data?.user?.role === 'admin') {
           setIsAdmin(true)
         } else {
           setIsAdmin(false)
@@ -82,33 +82,22 @@ function AdminModalInner({ open, onClose }) {
     e.preventDefault()
     setLoginError('')
     try {
-      const res = await fetch('/api/auth/admin-login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Requested-With': 'fetch',
-        },
-        body: JSON.stringify({ email: username.trim(), password }),
-      })
-      const data = await res.json()
-      if (res.ok && data.success) {
+      const data = await api.auth.adminLogin(username.trim(), password)
+      if (data?.success) {
         setIsAdmin(true)
         setLoginError('')
         toast('Welcome to Administrative Control Center')
       } else {
-        setLoginError(data.error || 'Invalid administrator credentials')
+        setLoginError(data?.error || 'Invalid administrator credentials')
       }
-    } catch {
-      setLoginError('Failed to communicate with authentication server')
+    } catch (err) {
+      setLoginError(err.message || 'Failed to communicate with authentication server')
     }
   }
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        headers: { 'X-Requested-With': 'fetch' },
-      })
+      await api.auth.logout()
     } catch {
       // ignore
     }

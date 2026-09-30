@@ -23,6 +23,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "test": "vitest run",
+    "seed": "node server/db/seed.mjs",
     "smoke": "node scripts/smoke.mjs",
     "site:dev": "cd site && vite",
     "site:build": "cd site && vite build",

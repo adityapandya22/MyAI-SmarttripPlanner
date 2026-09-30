@@ -22,8 +22,10 @@ export function parseCookies(cookieHeader) {
   return cookies
 }
 
-export function serializeSessionCookie(token, role = 'user', isSecure = false) {
-  const maxAgeSeconds = role === 'admin'
+export function serializeSessionCookie(token, role = 'user', isSecure = false, customTtlMs = null) {
+  const maxAgeSeconds = customTtlMs
+    ? Math.floor(customTtlMs / 1000)
+    : role === 'admin'
     ? Math.floor(ADMIN_SESSION_TTL_MS / 1000)
     : Math.floor(USER_SESSION_TTL_MS / 1000)
 
@@ -42,12 +44,12 @@ export function serializeClearSessionCookie(isSecure = false) {
   return cookie
 }
 
-export function createSession(db, user, ip = null, userAgent = null) {
+export function createSession(db, user, ip = null, userAgent = null, customTtlMs = null) {
   const token = generateToken()
   const tokenHashed = hashToken(token)
   const sessionId = crypto.randomUUID()
   const now = new Date()
-  const ttlMs = user.role === 'admin' ? ADMIN_SESSION_TTL_MS : USER_SESSION_TTL_MS
+  const ttlMs = customTtlMs || (user.role === 'admin' ? ADMIN_SESSION_TTL_MS : USER_SESSION_TTL_MS)
   const expiresAt = new Date(now.getTime() + ttlMs).toISOString()
 
   db.prepare(`
@@ -55,7 +57,7 @@ export function createSession(db, user, ip = null, userAgent = null) {
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(sessionId, user.id, tokenHashed, now.toISOString(), expiresAt, ip, userAgent)
 
-  return { token, sessionId, expiresAt }
+  return { token, sessionId, expiresAt, ttlMs }
 }
 
 export function getSession(db, token) {
@@ -65,7 +67,8 @@ export function getSession(db, token) {
 
   const row = db.prepare(`
     SELECT s.id AS session_id, s.user_id, s.expires_at,
-           u.email, u.display_name, u.role, u.home_currency, u.locale, u.is_active, u.must_change_pw
+           u.email, u.display_name, u.role, u.home_currency, u.locale, u.is_active, u.must_change_pw,
+           u.phone, u.home_city, u.travel_style, u.budget_pref, u.avatar_url, u.preferences_json, u.created_at
     FROM sessions s
     JOIN users u ON s.user_id = u.id
     WHERE s.token_hash = ? AND s.expires_at > ? AND u.is_active = 1

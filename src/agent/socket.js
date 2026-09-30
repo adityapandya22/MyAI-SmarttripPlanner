@@ -61,12 +61,8 @@ const initialEngine = savedEngine && VALID_ENGINES.includes(savedEngine) ? saved
 
 export const useAgentChat = create((set, get) => ({
   connected: false,
-<<<<<<< HEAD
-  connectionState: 'connecting', // 'connecting' | 'connected' | 'disconnected'
-=======
   connecting: true,
   connectionError: null,
->>>>>>> 8693e58 (Consumer bridge mode, provider status, model config, destination aliases)
   thinking: false,
   open: true,
   panelW: 0,
@@ -499,70 +495,36 @@ function handleEvent(msg) {
   }
 }
 
-<<<<<<< HEAD
-export function connectAgent(isManual = false) {
-=======
 export function connectAgent(force = false) {
->>>>>>> 8693e58 (Consumer bridge mode, provider status, model config, destination aliases)
   if (DEMO) {
     if (demoAgent) return
     import('../demo/agent').then((m) => {
       demoAgent = m.createDemoAgent(handleEvent)
-<<<<<<< HEAD
-      useAgentChat.setState({ connected: true, connectionState: 'connected' })
-=======
       useAgentChat.setState({ connected: true, connecting: false, connectionError: null })
->>>>>>> 8693e58 (Consumer bridge mode, provider status, model config, destination aliases)
       sendWs({ type: 'models_get' })
     })
     return
   }
-<<<<<<< HEAD
-  if (ws && (ws.readyState === 0 || ws.readyState === 1)) {
-    if (ws.readyState === 1) {
-      useAgentChat.setState({ connected: true, connectionState: 'connected' })
-    }
-    return
-  }
-  if (isManual) {
-    connectionAttempts = 0
-  }
-  useAgentChat.setState({ connectionState: 'connecting' })
-  const url = getWsUrl()
-  console.log(`[Ulisse Agent] Connecting to WebSocket at ${url} (attempt ${connectionAttempts + 1})...`)
-
-  try {
-    ws = new WebSocket(url)
-  } catch (err) {
-    console.warn(`[Ulisse Agent] Failed to create WebSocket for ${url}:`, err)
-    useAgentChat.setState({ connected: false, connectionState: 'disconnected' })
-=======
   if (!force && ws && (ws.readyState === 0 || ws.readyState === 1)) return
   if (force && ws) {
     try { ws.close() } catch { /* ignore */ }
     ws = null
   }
   useAgentChat.setState({ connecting: true, connectionError: null })
-  console.log(`[agent/socket] Connecting to ${WS_URL}`)
+  const wsUrl = getWsUrl()
+  console.log(`[agent/socket] Connecting to ${wsUrl}`)
   try {
-    ws = new WebSocket(WS_URL)
+    ws = new WebSocket(wsUrl)
   } catch (err) {
     console.error(`[agent/socket] WebSocket connection constructor failed:`, err)
     useAgentChat.setState({ connected: false, connecting: false, connectionError: err.message || 'Connection failed' })
->>>>>>> 8693e58 (Consumer bridge mode, provider status, model config, destination aliases)
     scheduleRetry()
     return
   }
 
   ws.onopen = () => {
-<<<<<<< HEAD
-    console.log(`[Ulisse Agent] Connected successfully to ${url}`)
-    connectionAttempts = 0
-    useAgentChat.setState({ connected: true, connectionState: 'connected' })
-=======
-    console.log(`[agent/socket] Connected successfully to ${WS_URL}`)
+    console.log(`[agent/socket] Connected successfully to ${wsUrl}`)
     useAgentChat.setState({ connected: true, connecting: false, connectionError: null })
->>>>>>> 8693e58 (Consumer bridge mode, provider status, model config, destination aliases)
     sendWs({ type: 'models_get' })
     sendWs({ type: 'providers_get' })
   }
@@ -570,15 +532,6 @@ export function connectAgent(force = false) {
     try { handleEvent(JSON.parse(e.data)) } catch { /* ignore malformed frames */ }
   }
   ws.onclose = (ev) => {
-<<<<<<< HEAD
-    console.log(`[Ulisse Agent] WebSocket closed (code: ${ev.code}, clean: ${ev.wasClean})`)
-    connectionAttempts++
-    useAgentChat.setState({ connected: false, connectionState: 'disconnected', thinking: false })
-    scheduleRetry()
-  }
-  ws.onerror = (err) => {
-    console.warn(`[Ulisse Agent] WebSocket error on ${url}:`, err)
-=======
     console.warn(`[agent/socket] Disconnected (code: ${ev.code}, reason: ${ev.reason || 'normal'})`)
     useAgentChat.setState({ connected: false, connecting: false, thinking: false })
     scheduleRetry()
@@ -586,24 +539,15 @@ export function connectAgent(force = false) {
   ws.onerror = (err) => {
     console.error(`[agent/socket] Connection error:`, err)
     useAgentChat.setState({ connectionError: 'Failed to connect to agent server' })
->>>>>>> 8693e58 (Consumer bridge mode, provider status, model config, destination aliases)
     ws?.close()
   }
 }
 
-<<<<<<< HEAD
-export function retryAgentConnection() {
-  clearTimeout(retryTimer)
-  if (ws) {
-    try { ws.close() } catch {}
-    ws = null
-  }
-=======
 export function retryConnection() {
   clearTimeout(retryTimer)
->>>>>>> 8693e58 (Consumer bridge mode, provider status, model config, destination aliases)
   connectAgent(true)
 }
+export const retryAgentConnection = retryConnection
 
 function scheduleRetry() {
   clearTimeout(retryTimer)

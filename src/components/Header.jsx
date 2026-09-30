@@ -18,6 +18,7 @@ import LanguageSwitcher from './LanguageSwitcher'
 import Modal from './Modal'
 import { DemoBadgeInline } from '../demo/DemoBadge'
 import AdminModal from './AdminModal'
+import UserMenu from './auth/UserMenu'
 
 export default function Header() {
   const { t } = useTranslation()
@@ -157,6 +158,7 @@ export default function Header() {
             <ShieldCheck size={14} className="text-indigo-600" />
             <span className="hidden @[64rem]:inline">Admin</span>
           </button>
+          <UserMenu compact />
           <MoreMenu onExport={onExport} onImport={() => fileRef.current?.click()} onCar={usesCar ? () => setMobilePanel('car') : null} />
           <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={onImportFile} />
         </div>

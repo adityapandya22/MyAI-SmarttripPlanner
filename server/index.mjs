@@ -14,9 +14,9 @@ import { createMcpHandler } from './mcp-http.mjs'
 import { createStorage, documentsDir } from './storage.mjs'
 import { handleWorldPlacesHttp } from './worldPlaces.mjs'
 import { initDb } from './db/index.mjs'
-import { bootstrapAdmin } from './auth/bootstrap.mjs'
+import { bootstrapAdmin, bootstrapDemoUser } from './auth/bootstrap.mjs'
 import { migrateFileTripsToDb } from './db/migrate-files.mjs'
-import { verifyCsrf } from './auth/csrf.mjs'
+import { verifyCsrf, isOriginAllowed } from './auth/csrf.mjs'
 import { parseCookies, getSession } from './auth/session.mjs'
 import { createAuthRouter } from './auth/routes.mjs'
 import { createAdminRouter } from './admin/routes.mjs'
@@ -43,6 +43,7 @@ if (process.env.NODE_ENV === 'production') {
 const dataDir = process.env.ULISSE_DATA_DIR || join(documentsDir(), 'Ulisse')
 const db = initDb(join(dataDir, 'ulisse.db'))
 await bootstrapAdmin(db)
+await bootstrapDemoUser(db)
 migrateFileTripsToDb(db, dataDir)
 
 const authRouter = createAuthRouter(db)
@@ -130,6 +131,28 @@ const storage = createStorage({ broadcast: (o) => bridge?.broadcast(o) })
 
 const http = createServer(async (req, res) => {
   try {
+    // 0. CORS & Preflight (OPTIONS)
+    const origin = req.headers['origin']
+    if (origin && isOriginAllowed(origin, PORT)) {
+      res.setHeader('Access-Control-Allow-Origin', origin)
+      res.setHeader('Access-Control-Allow-Credentials', 'true')
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Requested-With, Authorization, Accept')
+      res.setHeader('Access-Control-Max-Age', '86400')
+      res.setHeader('Vary', 'Origin')
+    }
+
+    if (req.method === 'OPTIONS') {
+      if (origin && !isOriginAllowed(origin, PORT)) {
+        res.writeHead(403, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'Origin not allowed' }))
+        return
+      }
+      res.writeHead(204)
+      res.end()
+      return
+    }
+
     // 1. Attach unique Request ID & Apply Security Headers
     attachRequestId(req, res)
     applySecurityHeaders(res)

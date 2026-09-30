@@ -189,6 +189,12 @@ describe('PART 2 — Server-Side Authentication & Hardening', () => {
         headers: { 'x-requested-with': 'fetch', origin: 'http://localhost:5200' },
       }
       expect(verifyCsrf(reqPostValid, 5200).ok).toBe(true)
+
+      const reqPostXmlHttp = {
+        method: 'POST',
+        headers: { 'x-requested-with': 'XMLHttpRequest', origin: 'http://localhost:5199' },
+      }
+      expect(verifyCsrf(reqPostXmlHttp, 5200).ok).toBe(true)
     })
   })
 
