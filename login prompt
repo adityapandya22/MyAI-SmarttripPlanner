@@ -1,0 +1,60 @@
+You are a senior full-stack engineer. Debug and fix authentication in this repo
+(MyAI-SmarttripPlanner, C:\Users\TEMP\MyAI-SmarttripPlanner). The app runs at
+http://localhost:5199. Work in small steps and do not rewrite unrelated code.
+
+SYMPTOM
+On /login, clicking Sign In shows: "Missing or invalid X-Requested-With header".
+Sign up also fails. Neither the user nor the admin can log in, and no data is saved.
+
+STEP 1 - DIAGNOSE (read before editing)
+1. Find the backend middleware that returns "Missing or invalid X-Requested-With
+   header" (search the whole repo). Note which routes/methods it protects and the
+   exact header value it expects.
+2. Find every frontend API call (fetch/axios) used for login, signup, logout,
+   /me or session check, Google login, forgot password, and trip save/sync.
+   List which ones send the header and which do not.
+3. Check the CORS config: allowed origins must include http://localhost:5199,
+   allowedHeaders must include X-Requested-With and Content-Type, and
+   credentials must be enabled if cookies/sessions are used. Confirm the
+   frontend uses credentials: 'include' (fetch) or withCredentials: true (axios).
+4. Check that the dev proxy (vite.config) or API base URL points to the correct
+   backend port, and that the backend is actually running.
+
+STEP 2 - FIX
+1. Create ONE central API client (e.g. src/lib/api.js) that always sends
+   'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json',
+   and credentials. Route ALL auth and data calls through it. Remove scattered
+   raw fetch calls.
+2. Fix the CORS/CSRF middleware so preflight (OPTIONS) requests succeed and are
+   not blocked by the header check.
+3. Fix Sign Up end to end: validation (email format, password length, confirm
+   match), duplicate-email handling with a clear message, password hashing
+   (bcrypt/argon2, never plain text), and creating the user record in the DB.
+4. Fix Sign In end to end: verify hashed password, issue a session cookie
+   (httpOnly, sameSite=lax) or JWT, return the user object with role.
+5. Fix roles: users have role 'user' or 'admin'. Seed a demo user
+   (traveler@example.com) and an admin account from environment variables
+   (ADMIN_EMAIL, ADMIN_PASSWORD), created on startup only if missing.
+   Protect admin routes with role-check middleware, and redirect after login
+   based on role (user -> planner, admin -> admin dashboard).
+6. Fix session persistence: after a page refresh the user stays logged in
+   (working /me endpoint + auth context on the frontend). Make "Remember me"
+   extend the session to 30 days. Fix Logout.
+7. Fix data saving: trips/itineraries must be saved to the database linked to
+   the logged-in user's ID and loaded again after login. Confirm the DB file or
+   connection path is correct and writable, and migrations/tables exist.
+8. Show real server error messages in the UI (not a generic failure), and add
+   loading and disabled states on the Sign In / Sign Up buttons.
+
+STEP 3 - VERIFY (actually run these, do not assume)
+- Start backend and frontend, then test with curl or Invoke-RestMethod:
+  signup -> login -> GET /me -> create a trip -> GET trips -> logout.
+- Test admin login and one admin-only route, and confirm a normal user gets 403.
+- Test wrong password, duplicate signup, and a request missing the header
+  (should still be rejected with a clear message).
+- Restart the servers and confirm the saved data is still there.
+
+OUTPUT
+Give a short summary: root cause, files changed, how to run and test, and the
+demo/admin credentials. Commit on a new branch (fix/auth-login) with a clear
+message. Do not push to main.

@@ -1,0 +1,44 @@
+You are a senior engineer. In this repo (MyAI-SmarttripPlanner,
+http://localhost:5199), fix ONE bug only: itinerary generation hangs.
+
+SYMPTOM
+Sending "bali trip" shows the steps "Trip settings", "Opening the planner",
+"New day: Day 1: Historic Palaces & Heritage of Bali", then the message
+"I've started building your personalized Bali itinerary (4 days)...", and then
+nothing more. The stop button stays active, the cursor keeps blinking, and no
+itinerary is shown.
+
+STRICT SCOPE RULES
+- Change only the code directly responsible for this hang (the chat/stream
+  handler, the AI response parsing, and the loading state tied to it).
+- Do NOT touch: login/auth, admin, the destination resolver, currency logic,
+  UI styling or layout, "My trips" or saving logic, dependencies, config
+  files, or any file unrelated to this bug.
+- Do NOT refactor, rename, reformat, or "clean up" existing code.
+- Keep the diff as small as possible. If a fix needs a change outside the
+  scope, stop and tell me instead of making it.
+
+STEP 1 - DIAGNOSE FIRST (no edits yet)
+1. Trace the flow: chat input -> API request -> backend handler -> AI call ->
+   streamed response -> frontend parser -> itinerary render.
+2. Reproduce with "bali trip". Capture the Network response for the chat
+   request (status and raw stream events) and the backend console output.
+3. Tell me exactly where it stops and the root cause (for example: provider
+   error or quota, swallowed exception, stream never sends a done/error event,
+   malformed JSON from the model, or buffering).
+4. Show me the diagnosis before changing anything.
+
+STEP 2 - MINIMAL FIX
+Fix only the root cause found in Step 1. Make sure that:
+- a failure is shown to the user as a clear message instead of hanging forever
+- the loading/stop state always resets when the stream ends or errors
+- the existing successful flow behaves exactly as before
+
+STEP 3 - VERIFY
+- "bali trip" renders a full itinerary.
+- One or two other destinations still work as before.
+- Show the final git diff so I can confirm only the necessary lines changed.
+
+OUTPUT
+Root cause, list of files changed (should be few), and the diff. Commit on a
+new branch (fix/trip-generation-hang). Do not push to main.
